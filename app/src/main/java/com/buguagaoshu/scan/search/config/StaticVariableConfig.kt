@@ -14,6 +14,9 @@ object StaticVariableConfig {
     // 划词：无障碍捕获到的选中文字，推送给悬浮窗
     val selectedTextFlow = MutableStateFlow<String>("")
 
+    // 锁定状态：主浮窗固定(锁定)还是可拖动(解锁)，供悬浮窗图标同步
+    val isLockedFlow = MutableStateFlow(true)
+
     // 存储配置好的 API 列表
     var apiConfigMap : MutableMap<String, ConfigData> = mutableMapOf()
     var API_MAP = "API_MAP"

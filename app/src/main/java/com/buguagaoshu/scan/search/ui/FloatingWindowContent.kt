@@ -3,6 +3,8 @@ package com.buguagaoshu.scan.search.ui
 import android.annotation.SuppressLint
 import android.app.Application
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -24,6 +26,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,8 +40,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -107,6 +113,7 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
 
     val prompt by commonViewModel.promptText.collectAsState()
     val explainMode by commonViewModel.explainMode.collectAsState()
+    val isLocked by StaticVariableConfig.isLockedFlow.collectAsState()
 
     // 划词：监听无障碍捕获的选中文字，自动填入问题框
     val selectedText by StaticVariableConfig.selectedTextFlow.collectAsState()
@@ -120,9 +127,6 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
     val history = remember { mutableStateListOf<ChatItem>() }
     var lastQuestion by remember { mutableStateOf("") }
 
-
-    // 透明度调节
-    var transparency by remember { mutableFloatStateOf(1f) }
 
     // 找到cheek为true的ConfigData，如果没有则使用第一个
     // 记录当前选中的 ConfigData
@@ -143,7 +147,7 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
         modifier = Modifier
             .size(width = 280.dp, height = 560.dp), // 调整高度以显示更多内容
         colors = CardDefaults.elevatedCardColors(
-            containerColor = Color.White.copy(alpha = transparency) // 使用 Color.White 作为基础颜色，并根据透明度变量调整透明度
+            containerColor = MaterialTheme.colorScheme.surface // 跟随主题，不再死白
         )
     ) {
         Column(
@@ -153,6 +157,36 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                 .padding(4.dp), // 增加内边距
             verticalArrangement = Arrangement.spacedBy(4.dp) // 增加元素间距
         ) {
+            // 顶部拖动手柄：下滑收起回气泡
+            val density = LocalDensity.current
+            var dragAccum by remember { mutableFloatStateOf(0f) }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(14.dp)
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures(
+                            onDragEnd = { dragAccum = 0f },
+                            onVerticalDrag = { _, dragAmount ->
+                                dragAccum += dragAmount
+                                if (dragAccum > with(density) { 60.dp.toPx() }) {
+                                    dragAccum = 0f
+                                    FxComposeControl.hideSearch(application)
+                                }
+                            }
+                        )
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(36.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(MaterialTheme.colorScheme.outlineVariant)
+                )
+            }
+
             // 顶部标题栏
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -176,8 +210,8 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                     ) {
                         Icon(
                             imageVector = Icons.Filled.KeyboardArrowDown,
-                            contentDescription = "最小化",
-                            //tint = MaterialTheme.colorScheme.primary // 使用主题色
+                            contentDescription = "收起",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     IconButton(
@@ -187,9 +221,9 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                         modifier = Modifier.size(32.dp) // 固定按钮大小
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Lock,
-                            contentDescription = "锁定",
-                            tint = MaterialTheme.colorScheme.primary // 使用主题色
+                            imageVector = if (isLocked) Icons.Filled.Lock else Icons.Filled.LockOpen,
+                            contentDescription = if (isLocked) "锁定" else "解锁",
+                            tint = if (isLocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     IconButton(
@@ -204,18 +238,6 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                     }
                 }
             }
-
-            // 分割线
-//            HorizontalDivider(
-//                modifier = Modifier.padding(vertical = 4.dp),
-//                thickness = 1.dp,
-//                color = MaterialTheme.colorScheme.outlineVariant
-//            )
-            Slider(
-                modifier = Modifier.height(12.dp),
-                value = transparency,
-                onValueChange = { transparency = it }
-            )
 
             // AI 服务商切换
             Row(
@@ -388,7 +410,7 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     ActionButton(
-                        modifier = Modifier.width(40.dp).height(30.dp),
+                        modifier = Modifier.width(64.dp).height(40.dp),
                         text = streamBtnText.value,
                         onClick = {
                             if (!streamInfo.value) {
@@ -415,7 +437,7 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                             }
 
                         },
-                        modifier = Modifier.weight(1f).height(30.dp)
+                        modifier = Modifier.weight(1f).height(40.dp)
                     )
 
 
@@ -457,7 +479,7 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                             showWebView.value = false
                             showResultVisible.value = false
                         },
-                        modifier = Modifier.weight(1f).height(30.dp),
+                        modifier = Modifier.weight(1f).height(40.dp),
                         containerColor = MaterialTheme.colorScheme.secondaryContainer // 使用次要容器色
                     )
 
@@ -476,7 +498,7 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                             isListVisible.value = false
                             showResultVisible.value = true
                         },
-                        modifier = Modifier.weight(1f).height(30.dp)
+                        modifier = Modifier.weight(1f).height(40.dp)
                     )
                 }
 
@@ -494,10 +516,10 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                             showResultVisible.value = false
                             showWebView.value = true
                         },
-                        modifier = Modifier.weight(2f).height(30.dp)
+                        modifier = Modifier.weight(2f).height(40.dp)
                     )
 
-                    FilledTonalButton(
+                    Button(
                         onClick = {
                             // 新增隐藏列表逻辑
                             isListVisible.value = false
@@ -511,7 +533,7 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                             aiResultText.value = ""
                             println("当前使用配置文件为：${selectedConfigData!!.name}，流式输出状态为：${streamInfo.value}")
                             if (questionText.isBlank() || selectedConfigData == null) {
-                                return@FilledTonalButton
+                                return@Button
                             }
 
 
@@ -604,8 +626,8 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
 
 
                         },
-                        modifier = Modifier.weight(2f).height(30.dp), // 占据更多空间
-                        colors = ButtonDefaults.filledTonalButtonColors(
+                        modifier = Modifier.weight(2f).height(40.dp), // 占据更多空间
+                        colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary // 使用主题色
                         )
                     ) {

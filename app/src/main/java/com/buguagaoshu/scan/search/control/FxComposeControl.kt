@@ -1,10 +1,19 @@
 package com.buguagaoshu.scan.search.control
 
 import android.app.Application
-import androidx.compose.material3.Button
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import com.buguagaoshu.scan.search.config.StaticVariableConfig
 import com.buguagaoshu.scan.search.ui.CommonViewModel
 import com.buguagaoshu.scan.search.ui.FloatingWindowContent
@@ -13,7 +22,6 @@ import com.petterp.floatingx.assist.FxDisplayMode
 import com.petterp.floatingx.assist.FxGravity
 import com.petterp.floatingx.assist.FxScopeType
 import com.petterp.floatingx.compose.enableComposeSupport
-import com.buguagaoshu.scan.search.R.string as TextValue
 
 object FxComposeControl {
     private val _TAG = "ScanSearch"
@@ -24,12 +32,15 @@ object FxComposeControl {
 
     fun updateDisplayMode() {
         if (hasMove) {
+            // 锁定：固定窗口，不可拖动
             hasMove = false
             FloatingX.configControl(_TAG).setDisplayMode(FxDisplayMode.ClickOnly)
+            StaticVariableConfig.isLockedFlow.value = true
         } else {
+            // 解锁：可拖动窗口位置 / 拖到边缘吸附
             hasMove = true
             FloatingX.configControl(_TAG).setDisplayMode(FxDisplayMode.Normal)
-
+            StaticVariableConfig.isLockedFlow.value = false
         }
     }
 
@@ -59,16 +70,26 @@ object FxComposeControl {
                 setGravity(FxGravity.LEFT_OR_TOP)
                 setDisplayMode(FxDisplayMode.Normal)
 
-
-
                 setLayoutView(
                     ComposeView(context).apply {
                         setContent {
-                            Button(onClick ={
-                                FloatingX.controlOrNull(_TAG)?.show()
-                                FloatingX.controlOrNull(_minimize_tag)?.hide()
-                            }) {
-                                Text(text = stringResource(TextValue.open_float))
+                            // 常驻小气泡：贴边圆形，点击展开主浮窗
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.85f))
+                                    .clickable {
+                                        FloatingX.controlOrNull(_TAG)?.show()
+                                        FloatingX.controlOrNull(_minimize_tag)?.hide()
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "问",
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
                             }
                         }
                     }
@@ -95,8 +116,6 @@ object FxComposeControl {
                 setScopeType(FxScopeType.SYSTEM)
                 setGravity(FxGravity.LEFT_OR_TOP)
                 setDisplayMode(FxDisplayMode.ClickOnly)
-
-
 
                 setLayoutView(
                     ComposeView(context).apply {
