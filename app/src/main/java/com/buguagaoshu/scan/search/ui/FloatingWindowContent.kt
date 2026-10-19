@@ -85,6 +85,7 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
     val modeText = stringResource(TextValue.mode)
     val explainText = stringResource(TextValue.explain)
     val solveText = stringResource(TextValue.solve)
+    val noConfigTips = stringResource(TextValue.no_config_tips)
 
     val textList = remember { mutableStateListOf<ScanSearchData>() }
     val textMap = remember { mutableStateMapOf<String, ScanSearchData>() }
@@ -493,7 +494,6 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                                     stringQuestion.append("${item.text}\n")
                                 }
                             }
-                            println(stringQuestion.toString())
                             commonViewModel.updateQuestionText(stringQuestion.toString())
                             // 新增隐藏列表逻辑
                             isListVisible.value = false
@@ -522,6 +522,16 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
 
                     Button(
                         onClick = {
+                            // 空值校验：无可用配置或问题为空时安全退出，避免空指针
+                            val config = selectedConfigData
+                            if (config == null) {
+                                android.widget.Toast.makeText(context, noConfigTips, android.widget.Toast.LENGTH_SHORT).show()
+                                return@Button
+                            }
+                            if (questionText.isBlank()) {
+                                return@Button
+                            }
+
                             // 新增隐藏列表逻辑
                             isListVisible.value = false
                             showWebView.value = false
@@ -532,16 +542,10 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                             }
                             lastQuestion = questionText
                             aiResultText.value = ""
-                            println("当前使用配置文件为：${selectedConfigData!!.name}，流式输出状态为：${streamInfo.value}")
-                            if (questionText.isBlank() || selectedConfigData == null) {
-                                return@Button
-                            }
-
-
 
                             val sendData = SendData(
                                 stream = streamInfo.value,
-                                selectedConfigData!!.modelName,
+                                config.modelName,
                                 listOf(
                                     SendMessage(
                                         "system",
@@ -562,8 +566,8 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                             if (streamInfo.value) {
                                 HttpControl.sendStream(
                                     sendData,
-                                    selectedConfigData!!.api,
-                                    selectedConfigData!!.apiKey,
+                                    config.api,
+                                    config.apiKey,
                                     onChunkReceived = { chunk ->
                                         val jsonLine = if (chunk.startsWith("data: ")) {
                                             chunk.substring("data: ".length)
@@ -598,10 +602,9 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                                 aiResultText.value = "当前使用非流式输出，等待时间可能较长，请耐心等待！\n"
                                 HttpControl.send(
                                     sendData,
-                                    selectedConfigData!!.api,
-                                    selectedConfigData!!.apiKey,
+                                    config.api,
+                                    config.apiKey,
                                     onSuccess = { str ->
-                                        println(str)
                                         try {
                                             val jsstr = jsonConfig.decodeFromString<ChatResponse>(str)
 

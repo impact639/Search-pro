@@ -155,8 +155,6 @@ fun HomePage(commonViewModel: CommonViewModel ,openFloatingWindow: () -> Unit) {
                 Button(
                     modifier = Modifier.fillMaxWidth(),
                     onClick = {
-                        println(commonViewModel.apiKeyText.value)
-                        println(commonViewModel.aiServerBaseUrl.value)
                         val config = ConfigData(
                             Uuid.random().toString(),
                             commonViewModel.apiName.value,

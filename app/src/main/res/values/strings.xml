@@ -28,4 +28,5 @@
     <string name="explain">解释</string>
     <string name="solve">解题</string>
     <string name="request_failed">请求失败：</string>
+    <string name="no_config_tips">请先在主界面添加并保存配置</string>
 </resources>

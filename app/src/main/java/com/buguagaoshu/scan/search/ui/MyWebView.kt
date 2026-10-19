@@ -33,8 +33,8 @@ fun MyWebView () {
 
                     databaseEnabled = true
                     setSupportMultipleWindows(true)
-                    javaScriptCanOpenWindowsAutomatically = true
-                    mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                    javaScriptCanOpenWindowsAutomatically = false
+                    mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
                     layoutAlgorithm = WebSettings.LayoutAlgorithm.NORMAL
                 }
 
@@ -54,7 +54,8 @@ fun MyWebView () {
                         handler: SslErrorHandler,
                         error: SslError?
                     ) {
-                        handler.proceed()
+                        // 安全策略：证书错误一律拒绝，不跳过验证
+                        handler.cancel()
                     }
                 }
 

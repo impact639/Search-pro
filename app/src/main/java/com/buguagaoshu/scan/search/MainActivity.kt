@@ -79,7 +79,6 @@ class MainActivity : ComponentActivity() {
                 application,
                 StaticVariableConfig.API_MAP
             ).collect { value ->
-                println(value)
                 var configMap : MutableMap<String, ConfigData> = mutableMapOf()
                 if (value == null || value.isBlank()) {
                     return@collect
