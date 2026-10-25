@@ -27,10 +27,28 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug --no-daemon
+        id: build
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log
+
+      - name: Surface build error
+        if: steps.build.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          grep -E "^e: |^error: |Unresolved reference|What went wrong|> Task .*FAILED|FAILURE:|Compilation error|Execution failed|Caused by" build.log | head -80 > report.txt || echo "(no matching error lines)" > report.txt
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" -F body=@report.txt > /dev/null 2>&1 || true
+          echo "Reported build error to commit comment."
 
       - name: Upload APK
+        if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
           path: app/build/outputs/apk/debug/*.apk
+
+      - name: Fail job on build error
+        if: steps.build.outcome == 'failure'
+        run: exit 1
