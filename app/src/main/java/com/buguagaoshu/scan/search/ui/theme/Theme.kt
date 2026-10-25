@@ -11,33 +11,65 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
+private val LightColors = lightColorScheme(
+    primary = IndigoPrimary,
+    onPrimary = IndigoOnPrimary,
+    primaryContainer = IndigoPrimaryContainer,
+    onPrimaryContainer = IndigoOnPrimaryContainer,
+    secondary = IndigoSecondary,
+    onSecondary = IndigoOnSecondary,
+    secondaryContainer = IndigoSecondaryContainer,
+    onSecondaryContainer = IndigoOnSecondaryContainer,
+    tertiary = IndigoTertiary,
+    onTertiary = IndigoOnTertiary,
+    tertiaryContainer = IndigoTertiaryContainer,
+    onTertiaryContainer = IndigoOnTertiaryContainer,
+    error = IndigoError,
+    onError = IndigoOnError,
+    errorContainer = IndigoErrorContainer,
+    onErrorContainer = IndigoOnErrorContainer,
+    background = IndigoBackground,
+    onBackground = IndigoOnBackground,
+    surface = IndigoSurface,
+    onSurface = IndigoOnSurface,
+    surfaceVariant = IndigoSurfaceVariant,
+    onSurfaceVariant = IndigoOnSurfaceVariant,
+    outline = IndigoOutline,
+    outlineVariant = IndigoOutlineVariant,
 )
 
-private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+private val DarkColors = darkColorScheme(
+    primary = IndigoPrimaryDark,
+    onPrimary = IndigoOnPrimaryDark,
+    primaryContainer = IndigoPrimaryContainerDark,
+    onPrimaryContainer = IndigoOnPrimaryContainerDark,
+    secondary = IndigoSecondaryDark,
+    onSecondary = IndigoOnSecondaryDark,
+    secondaryContainer = IndigoSecondaryContainerDark,
+    onSecondaryContainer = IndigoOnSecondaryContainerDark,
+    tertiary = IndigoTertiaryDark,
+    onTertiary = IndigoOnTertiaryDark,
+    tertiaryContainer = IndigoTertiaryContainerDark,
+    onTertiaryContainer = IndigoOnTertiaryContainerDark,
+    error = IndigoErrorDark,
+    onError = IndigoOnErrorDark,
+    errorContainer = IndigoErrorContainerDark,
+    onErrorContainer = IndigoOnErrorContainerDark,
+    background = IndigoBackgroundDark,
+    onBackground = IndigoOnBackgroundDark,
+    surface = IndigoSurfaceDark,
+    onSurface = IndigoOnSurfaceDark,
+    surfaceVariant = IndigoSurfaceVariantDark,
+    onSurfaceVariant = IndigoOnSurfaceVariantDark,
+    outline = IndigoOutlineDark,
+    outlineVariant = IndigoOutlineVariantDark,
 )
 
 @Composable
 fun SearchTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
+    // 默认关闭动态取色，保证品牌靛蓝主色始终一致；需要跟随系统壁纸时可改为 true
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -46,8 +78,8 @@ fun SearchTheme(
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
 
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+        darkTheme -> DarkColors
+        else -> LightColors
     }
 
     MaterialTheme(

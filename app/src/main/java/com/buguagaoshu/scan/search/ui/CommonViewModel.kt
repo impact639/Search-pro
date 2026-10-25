@@ -19,6 +19,10 @@ import javax.inject.Inject
 @HiltViewModel
 class CommonViewModel @Inject constructor() : ViewModel() {
     companion object {
+        // 默认服务器地址与模型名（新增配置时的初始值）
+        const val DEFAULT_BASE_URL = "https://api.deepseek.com/chat/completions"
+        const val DEFAULT_MODEL_NAME = "deepseek-reasoner"
+
         // 解释模式（默认）：帮助理解选中的概念/文字
         val PROMPT_EXPLAIN = """
             【角色设定】
@@ -67,7 +71,7 @@ class CommonViewModel @Inject constructor() : ViewModel() {
     private var _apiId: String = ""
 
     // ai 服务商列表
-    private val _aiServerBaseUrl = MutableStateFlow("https://api.deepseek.com/chat/completions")
+    private val _aiServerBaseUrl = MutableStateFlow(DEFAULT_BASE_URL)
     val aiServerBaseUrl = _aiServerBaseUrl.asStateFlow()
 
     // 存储 ai 服务商的 api key
@@ -75,7 +79,7 @@ class CommonViewModel @Inject constructor() : ViewModel() {
     val apiKeyText = _apiKeyText.asStateFlow()
 
     // 模型名称
-    private val  _modelName = MutableStateFlow("deepseek-reasoner")
+    private val  _modelName = MutableStateFlow(DEFAULT_MODEL_NAME)
     val modelName = _modelName.asStateFlow();
 
     // 存储需要提问的问题
@@ -138,6 +142,17 @@ class CommonViewModel @Inject constructor() : ViewModel() {
         viewModelScope.launch {
             _explainMode.value = explain
             _promptText.value = if (explain) PROMPT_EXPLAIN else PROMPT_SOLVE
+        }
+    }
+
+    // 新增配置前清空表单为默认值（名称/模型/Key 置空，地址恢复默认，提示词恢复解释模式）
+    fun prepareNewConfig() {
+        viewModelScope.launch {
+            _apiName.value = ""
+            _aiServerBaseUrl.value = DEFAULT_BASE_URL
+            _modelName.value = ""
+            _apiKeyText.value = ""
+            _promptText.value = PROMPT_EXPLAIN
         }
     }
 

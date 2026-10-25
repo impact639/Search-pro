@@ -21,14 +21,29 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
-import androidx.compose.material3.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -60,7 +75,7 @@ import com.buguagaoshu.scan.search.data.ConfigData
 import com.buguagaoshu.scan.search.data.ScanSearchData
 import com.buguagaoshu.scan.search.data.SendData
 import com.buguagaoshu.scan.search.data.SendMessage
-
+import com.buguagaoshu.scan.search.ui.theme.Dimens
 import com.petterp.floatingx.util.FxInputHelper
 import dev.jeziellago.compose.markdowntext.MarkdownText
 import kotlinx.serialization.json.Json
@@ -76,46 +91,39 @@ fun FloatingWindowContentPreview() {
 @SuppressLint("UnrememberedMutableState")
 @Composable
 fun FloatingWindowContent(commonViewModel: CommonViewModel) {
-    // 使用 mutableStateListOf 来管理可变列表，自动跟踪列表变化
     val closeKeyBoard = stringResource(TextValue.close_keyboard)
     val openKeyBoard = stringResource(TextValue.open_keyboard)
     val streamText = stringResource(TextValue.stream)
-    val closeStreamText = stringResource(TextValue.close_stream)
     val requestFailedText = stringResource(TextValue.request_failed)
     val modeText = stringResource(TextValue.mode)
     val explainText = stringResource(TextValue.explain)
     val solveText = stringResource(TextValue.solve)
     val noConfigTips = stringResource(TextValue.no_config_tips)
+    val readScreenText = stringResource(TextValue.read_screen)
+    val webText = stringResource(TextValue.web)
+    val fillQuestionText = stringResource(TextValue.fill_question)
 
     val textList = remember { mutableStateListOf<ScanSearchData>() }
     val textMap = remember { mutableStateMapOf<String, ScanSearchData>() }
 
-    // 控制数据列表的显示与不显示
     val isListVisible = remember { mutableStateOf(true) }
     val showResultVisible = remember { mutableStateOf(false) }
     val showWebView = remember { mutableStateOf(false) }
-    val aiResultText = remember { mutableStateOf("") } // 新增AI结果状态
-    val keyboardText =  remember { mutableStateOf(openKeyBoard) }
-
+    val aiResultText = remember { mutableStateOf("") }
 
     val showKeyboard = remember { mutableStateOf(false) }
-
-    val streamBtnText =  remember { mutableStateOf(streamText) }
     val streamInfo = remember { mutableStateOf(true) }
 
     val questionText by commonViewModel.questionText.collectAsState()
+    val prompt by commonViewModel.promptText.collectAsState()
+    val explainMode by commonViewModel.explainMode.collectAsState()
+    val isLocked by StaticVariableConfig.isLockedFlow.collectAsState()
 
     val view = LocalView.current
     val context = LocalContext.current
     val application = context.applicationContext as Application
     val alphabet = listOf("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K")
     val configMap = commonViewModel.apiMap
-
-
-
-    val prompt by commonViewModel.promptText.collectAsState()
-    val explainMode by commonViewModel.explainMode.collectAsState()
-    val isLocked by StaticVariableConfig.isLockedFlow.collectAsState()
 
     // 划词：监听无障碍捕获的选中文字，自动填入问题框
     val selectedText by StaticVariableConfig.selectedTextFlow.collectAsState()
@@ -129,9 +137,7 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
     val history = remember { mutableStateListOf<ChatItem>() }
     var lastQuestion by remember { mutableStateOf("") }
 
-
-    // 找到cheek为true的ConfigData，如果没有则使用第一个
-    // 记录当前选中的 ConfigData
+    // 找到 cheek 为 true 的 ConfigData，否则使用第一个
     var selectedConfigData by remember { mutableStateOf<ConfigData?>(null) }
     for (entry in configMap.values) {
         if (entry.cheek) {
@@ -143,506 +149,512 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
         selectedConfigData = configMap.values.first()
     }
 
-    ElevatedCard(
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp), // 增加阴影高度
-        shape = RoundedCornerShape(16.dp), // 添加圆角
-        modifier = Modifier
-            .size(width = 280.dp, height = 560.dp), // 调整高度以显示更多内容
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = MaterialTheme.colorScheme.surface // 跟随主题，不再死白
-        )
+    val onSelectConfig: (ConfigData) -> Unit = { newSelected ->
+        if (newSelected == selectedConfigData) {
+            selectedConfigData = null
+            newSelected.cheek = false
+        } else {
+            selectedConfigData?.cheek = false
+            selectedConfigData = newSelected
+            newSelected.cheek = true
+            commonViewModel.showUserSelectConfig(newSelected)
+        }
+        commonViewModel.updateConfig(context)
+    }
+
+    Card(
+        shape = RoundedCornerShape(Dimens.RadiusLg),
+        modifier = Modifier.size(width = Dimens.FloatingWidth, height = Dimens.FloatingHeight),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+        ),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                //.verticalScroll(scrollState)
-                .padding(4.dp), // 增加内边距
-            verticalArrangement = Arrangement.spacedBy(4.dp) // 增加元素间距
-        ) {
-            // 顶部拖动手柄：下滑收起回气泡
-            val density = LocalDensity.current
-            var dragAccum by remember { mutableFloatStateOf(0f) }
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(14.dp)
-                    .pointerInput(Unit) {
-                        detectVerticalDragGestures(
-                            onDragEnd = { dragAccum = 0f },
-                            onVerticalDrag = { _, dragAmount ->
-                                dragAccum += dragAmount
-                                if (dragAccum > with(density) { 60.dp.toPx() }) {
-                                    dragAccum = 0f
-                                    FxComposeControl.hideSearch(application)
-                                }
-                            }
-                        )
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .width(36.dp)
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(MaterialTheme.colorScheme.outlineVariant)
-                )
-            }
-
-            // 顶部标题栏
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(TextValue.float_title),
-                    style = MaterialTheme.typography.titleMedium, // 使用预设样式
-                    modifier = Modifier.weight(1f), // 占据剩余空间
-                )
-
-                // 图标按钮组
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp) // 按钮间添加间距
-                ) {
-                    IconButton(
-                        onClick = {
-                            FxComposeControl.hideSearch(application)
-                        },
-                        modifier = Modifier.size(32.dp) // 固定按钮大小
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.KeyboardArrowDown,
-                            contentDescription = "收起",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            FxComposeControl.updateDisplayMode()
-                        },
-                        modifier = Modifier.size(32.dp) // 固定按钮大小
-                    ) {
-                        Icon(
-                            imageVector = if (isLocked) Icons.Filled.Lock else Icons.Filled.LockOpen,
-                            contentDescription = if (isLocked) "锁定" else "解锁",
-                            tint = if (isLocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    IconButton(
-                        onClick = { FxComposeControl.cancel() },
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = "关闭",
-                            tint = MaterialTheme.colorScheme.error // 使用错误色
-                        )
-                    }
-                }
-            }
-
-            // AI 服务商切换
-            Row(
-                modifier = Modifier
-                    .padding(0.dp)
-                    .horizontalScroll(rememberScrollState()), // 添加水平滚动条
-            ) {
-                configMap.forEach { (key, value) ->
-                    ConfigMiniFilterChip(
-                        configData = value,
-                        commonViewModel = commonViewModel,
-                        isSelected = value == selectedConfigData,
-                        onSelect = { newSelected ->
-                            // 如果点击的是已经选中的 ConfigFilterChip，则取消选中
-                            if (newSelected == selectedConfigData) {
-                                selectedConfigData = null
-                                newSelected.cheek = false
-                            } else {
-                                // 取消之前选中的 ConfigFilterChip
-                                selectedConfigData?.cheek = false
-                                // 选中新的 ConfigFilterChip
-                                selectedConfigData = newSelected
-                                newSelected.cheek = true
-                                commonViewModel.showUserSelectConfig(newSelected)
-                            }
-                            commonViewModel.updateConfig(context)
-                        }
-                    )
-                    Spacer(modifier = Modifier.width(1.dp))
-                }
-            }
-
-
-            // 解释/解题模式切换
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = modeText,
-                    style = MaterialTheme.typography.labelMedium,
-                )
-                FilterChip(
-                    selected = explainMode,
-                    onClick = { commonViewModel.setPromptMode(true) },
-                    label = { Text(explainText, style = TextStyle(fontSize = 12.sp)) },
-                    modifier = Modifier.height(28.dp)
-                )
-                FilterChip(
-                    selected = !explainMode,
-                    onClick = { commonViewModel.setPromptMode(false) },
-                    label = { Text(solveText, style = TextStyle(fontSize = 12.sp)) },
-                    modifier = Modifier.height(28.dp)
-                )
-            }
-
-            // 读取的数据列表
-            AnimatedVisibility(
-                visible = isListVisible.value,
-                modifier = Modifier.weight(1f)
-            ) {
-                // 内容列表
-                LazyColumn(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .height(305.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(textList) { item ->
-                        Surface(
-                            shape = RoundedCornerShape(8.dp), // 添加圆角
-                            color = MaterialTheme.colorScheme.surfaceVariant, // 使用表面变体色
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 4.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = item.text,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .padding(end = 8.dp), // 添加右边距
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                                Checkbox(
-                                    checked = textMap[item.id]?.cheek ?: false,
-                                    onCheckedChange = {
-                                        // 创建一个新的 ScanSearchData 对象
-                                        val newItem = item.copy(cheek = it)
-                                        textMap[item.id] = newItem
-                                    },
-                                    colors = CheckboxDefaults.colors(
-                                        checkedColor = MaterialTheme.colorScheme.primary // 使用主题色
-                                    )
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 结果框：聊天记录 + 当前答案
-            AnimatedVisibility(
-                visible = showResultVisible.value,
-            ) {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(285.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(history) { item ->
-                        Column(modifier = Modifier.padding(horizontal = 8.dp)) {
-                            if (item.question.isNotBlank()) {
-                                Text(
-                                    text = item.question,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                            MarkdownText(
-                                markdown = item.answer,
-                                isTextSelectable = true,
-                            )
-                        }
-                    }
-                    if (aiResultText.value.isNotBlank()) {
-                        item {
-                            MarkdownText(
-                                modifier = Modifier.padding(horizontal = 8.dp),
-                                markdown = aiResultText.value,
-                                isTextSelectable = true,
-                            )
-                        }
-                    }
-                }
-            }
-
-            AnimatedVisibility(
-                visible = showWebView.value
-            ) {
-                MyWebView()
-            }
-
-
-            // 输入框
-            OutlinedTextField(
-                value = questionText,
-                onValueChange = { commonViewModel.updateQuestionText(it) },
-                label = { Text(stringResource(TextValue.search_tips)) },
-                maxLines = 2,
-                shape = RoundedCornerShape(8.dp), // 添加圆角
-                modifier = Modifier.fillMaxWidth()
+        Column(modifier = Modifier.fillMaxSize()) {
+            FloatingTopBar(
+                title = stringResource(TextValue.float_title),
+                isLocked = isLocked,
+                onCollapse = { FxComposeControl.hideSearch(application) },
+                onToggleLock = { FxComposeControl.updateDisplayMode() },
+                onClose = { FxComposeControl.cancel() },
             )
 
-            // 操作按钮组
+            // 次级控制区：模型切换 + 模式 + 流式
             Column(
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Dimens.SpaceSm),
+                verticalArrangement = Arrangement.spacedBy(Dimens.SpaceXs),
             ) {
-                // 键盘操作行
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                ) {
+                    configMap.forEach { (_, value) ->
+                        ConfigMiniFilterChip(
+                            configData = value,
+                            isSelected = value == selectedConfigData,
+                            onSelect = onSelectConfig,
+                        )
+                        Spacer(modifier = Modifier.width(2.dp))
+                    }
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceXs),
                 ) {
-                    ActionButton(
-                        modifier = Modifier.width(64.dp).height(40.dp),
-                        text = streamBtnText.value,
-                        onClick = {
-                            if (!streamInfo.value) {
-                                streamBtnText.value = streamText
-                                streamInfo.value = true
-                            } else {
-                                streamBtnText.value = closeStreamText
-                                streamInfo.value = false
-                            }
-
-                        },
+                    Text(text = modeText, style = MaterialTheme.typography.labelMedium)
+                    FilterChip(
+                        selected = explainMode,
+                        onClick = { commonViewModel.setPromptMode(true) },
+                        label = { Text(explainText, style = TextStyle(fontSize = 12.sp)) },
+                        modifier = Modifier.height(28.dp),
                     )
-                    ActionButton(
-                        text = keyboardText.value,
-                        onClick = {
-                            if (!showKeyboard.value) {
-                                keyboardText.value = closeKeyBoard
-                                showKeyboard.value = true
-                                FxInputHelper.showKeyBoard("ScanSearch", view)
-                            } else {
-                                keyboardText.value = openKeyBoard
-                                showKeyboard.value = false
-                                FxInputHelper.hideKeyBoard("ScanSearch", view)
-                            }
-
-                        },
-                        modifier = Modifier.weight(1f).height(40.dp)
+                    FilterChip(
+                        selected = !explainMode,
+                        onClick = { commonViewModel.setPromptMode(false) },
+                        label = { Text(solveText, style = TextStyle(fontSize = 12.sp)) },
+                        modifier = Modifier.height(28.dp),
                     )
-
-
-                    ActionButton(
-                        text = stringResource(TextValue.load_data),
-                        onClick = {
-                            println("点击读取屏幕按钮")
-                            // 清除历史数据
-                            textList.clear()
-                            textMap.clear()
-
-                            var i = 0;
-
-                            while (i < StaticVariableConfig.screenTextList.size) {
-                                if (alphabet.contains(StaticVariableConfig.screenTextList[i].text)) {
-                                    if (i + 1 >= StaticVariableConfig.screenTextList.size) {
-                                        textList.add(StaticVariableConfig.screenTextList[i])
-                                    } else {
-                                        // 处理只有的情况ABCD
-                                        textList.add(
-                                            ScanSearchData(
-                                                StaticVariableConfig.screenTextList[i].id,
-                                                "${StaticVariableConfig.screenTextList[i].text}.${StaticVariableConfig.screenTextList[i + 1].text}"
-                                                )
-                                        )
-                                        i++
-                                    }
-                                } else {
-                                    textList.add(StaticVariableConfig.screenTextList[i])
-                                }
-                                i++
-                            }
-
-                            textList.forEach { key ->
-                                textMap[key.id] = key
-                            }
-                            // 显示列表
-                            isListVisible.value = true
-                            showWebView.value = false
-                            showResultVisible.value = false
-                        },
-                        modifier = Modifier.weight(1f).height(40.dp),
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer // 使用次要容器色
+                    Spacer(modifier = Modifier.weight(1f))
+                    Text(text = streamText, style = MaterialTheme.typography.labelMedium)
+                    Switch(
+                        checked = streamInfo.value,
+                        onCheckedChange = { streamInfo.value = it },
+                        modifier = Modifier.height(28.dp),
                     )
+                }
+            }
 
-                    ActionButton(
-                        text = stringResource(TextValue.confirm),
-                        onClick = {
+            HorizontalDivider(
+                modifier = Modifier.padding(top = Dimens.SpaceXs),
+                color = MaterialTheme.colorScheme.outlineVariant,
+            )
+
+            // 内容区：读屏列表 / 回答结果 / 网页，占满剩余空间
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+            ) {
+                AnimatedVisibility(
+                    visible = isListVisible.value,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    ScreenTextList(
+                        textList = textList,
+                        textMap = textMap,
+                        fillQuestionText = fillQuestionText,
+                        onConfirm = {
                             val stringQuestion = StringBuilder()
-                            for (item : ScanSearchData in textList) {
+                            for (item: ScanSearchData in textList) {
                                 if (textMap[item.id]?.cheek == true) {
                                     stringQuestion.append("${item.text}\n")
                                 }
                             }
                             commonViewModel.updateQuestionText(stringQuestion.toString())
-                            // 新增隐藏列表逻辑
                             isListVisible.value = false
                             showResultVisible.value = true
                         },
-                        modifier = Modifier.weight(1f).height(40.dp)
+                    )
+                }
+                AnimatedVisibility(
+                    visible = showResultVisible.value,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    ResultList(history = history, currentAnswer = aiResultText.value)
+                }
+                AnimatedVisibility(
+                    visible = showWebView.value,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    MyWebView()
+                }
+            }
+
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant,
+            )
+
+            // 输入区
+            OutlinedTextField(
+                value = questionText,
+                onValueChange = { commonViewModel.updateQuestionText(it) },
+                label = { Text(stringResource(TextValue.search_tips)) },
+                maxLines = 3,
+                shape = RoundedCornerShape(Dimens.RadiusSm),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Dimens.SpaceSm),
+            )
+
+            // 底部操作区
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(Dimens.SpaceSm),
+                horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ActionButton(
+                    text = readScreenText,
+                    onClick = {
+                        // 清除历史数据
+                        textList.clear()
+                        textMap.clear()
+
+                        var i = 0
+                        while (i < StaticVariableConfig.screenTextList.size) {
+                            if (alphabet.contains(StaticVariableConfig.screenTextList[i].text)) {
+                                if (i + 1 >= StaticVariableConfig.screenTextList.size) {
+                                    textList.add(StaticVariableConfig.screenTextList[i])
+                                } else {
+                                    // 处理只有的情况 ABCD
+                                    textList.add(
+                                        ScanSearchData(
+                                            StaticVariableConfig.screenTextList[i].id,
+                                            "${StaticVariableConfig.screenTextList[i].text}.${StaticVariableConfig.screenTextList[i + 1].text}",
+                                        ),
+                                    )
+                                    i++
+                                }
+                            } else {
+                                textList.add(StaticVariableConfig.screenTextList[i])
+                            }
+                            i++
+                        }
+
+                        textList.forEach { key ->
+                            textMap[key.id] = key
+                        }
+                        isListVisible.value = true
+                        showWebView.value = false
+                        showResultVisible.value = false
+                    },
+                    modifier = Modifier.weight(1f).height(Dimens.CompactControlHeight),
+                )
+
+                ActionButton(
+                    text = webText,
+                    onClick = {
+                        isListVisible.value = false
+                        showResultVisible.value = false
+                        showWebView.value = true
+                    },
+                    modifier = Modifier.weight(1f).height(Dimens.CompactControlHeight),
+                )
+
+                IconButton(
+                    onClick = {
+                        if (!showKeyboard.value) {
+                            showKeyboard.value = true
+                            FxInputHelper.showKeyBoard("ScanSearch", view)
+                        } else {
+                            showKeyboard.value = false
+                            FxInputHelper.hideKeyBoard("ScanSearch", view)
+                        }
+                    },
+                    modifier = Modifier.size(Dimens.CompactControlHeight),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Keyboard,
+                        contentDescription = if (showKeyboard.value) closeKeyBoard else openKeyBoard,
+                        tint = if (showKeyboard.value) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                     )
                 }
 
-                // 确认操作行
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
+                Button(
+                    onClick = submit@{
+                        // 空值校验：无可用配置或问题为空时安全退出，避免空指针
+                        val config = selectedConfigData
+                        if (config == null) {
+                            android.widget.Toast.makeText(context, noConfigTips, android.widget.Toast.LENGTH_SHORT).show()
+                            return@submit
+                        }
+                        if (questionText.isBlank()) {
+                            return@submit
+                        }
 
+                        // 新增隐藏列表逻辑
+                        isListVisible.value = false
+                        showWebView.value = false
+                        showResultVisible.value = true
+                        // 归档上一条问答
+                        if (lastQuestion.isNotBlank() && aiResultText.value.isNotBlank()) {
+                            history.add(ChatItem(lastQuestion, aiResultText.value))
+                        }
+                        lastQuestion = questionText
+                        aiResultText.value = ""
 
-                    ActionButton(
-                        text = stringResource(TextValue.open_web),
-                        onClick = {
-                            isListVisible.value = false
-                            showResultVisible.value = false
-                            showWebView.value = true
-                        },
-                        modifier = Modifier.weight(2f).height(40.dp)
-                    )
-
-                    Button(
-                        onClick = {
-                            // 空值校验：无可用配置或问题为空时安全退出，避免空指针
-                            val config = selectedConfigData
-                            if (config == null) {
-                                android.widget.Toast.makeText(context, noConfigTips, android.widget.Toast.LENGTH_SHORT).show()
-                                return@Button
-                            }
-                            if (questionText.isBlank()) {
-                                return@Button
-                            }
-
-                            // 新增隐藏列表逻辑
-                            isListVisible.value = false
-                            showWebView.value = false
-                            showResultVisible.value = true
-                            // 归档上一条问答
-                            if (lastQuestion.isNotBlank() && aiResultText.value.isNotBlank()) {
-                                history.add(ChatItem(lastQuestion, aiResultText.value))
-                            }
-                            lastQuestion = questionText
-                            aiResultText.value = ""
-
-                            val sendData = SendData(
-                                stream = streamInfo.value,
-                                config.modelName,
-                                listOf(
-                                    SendMessage(
-                                        "system",
-                                       prompt
-                                    ),
-                                    SendMessage(
-                                        "user",
-                                        questionText
-                                    )
-                                )
-                            )
-                            val jsonConfig = Json {
-                                ignoreUnknownKeys = true
-                                isLenient = true
-                                coerceInputValues = true // 允许将 null 转换为默认值
-                            }
-
-                            if (streamInfo.value) {
-                                HttpControl.sendStream(
-                                    sendData,
-                                    config.api,
-                                    config.apiKey,
-                                    onChunkReceived = { chunk ->
-                                        val jsonLine = if (chunk.startsWith("data: ")) {
-                                            chunk.substring("data: ".length)
-                                        } else {
-                                            chunk
-                                        }
-                                        if (chunk == ": keep-alive") {
-                                            return@sendStream
-                                        }
-
-                                        try {
-                                            val str = jsonConfig.decodeFromString<ChatResponse>(jsonLine)
-                                            if (str.choices.isNotEmpty()) {
-                                                if (str.choices[0].delta?.reasoning_content?.isNotEmpty() == true) {
-                                                    aiResultText.value += str.choices[0].delta?.reasoning_content
-                                                }
-                                                aiResultText.value += str.choices[0].delta?.content
-                                            }
-                                        } catch (e: Exception) {
-                                            println(e.message)
-                                        }
-                                    },
-                                    onComplete = {
-                                        println("Streaming completed.")
-                                    },
-                                    onError = { error ->
-                                        aiResultText.value = "$requestFailedText$error"
-                                        println("Error: $error")
-                                    }
-                                )
-                            } else {
-                                aiResultText.value = "当前使用非流式输出，等待时间可能较长，请耐心等待！\n"
-                                HttpControl.send(
-                                    sendData,
-                                    config.api,
-                                    config.apiKey,
-                                    onSuccess = { str ->
-                                        try {
-                                            val jsstr = jsonConfig.decodeFromString<ChatResponse>(str)
-
-                                            if (jsstr.choices.isNotEmpty()) {
-                                                // 显示思维链
-                                                if (jsstr.choices[0].message?.reasoning_content?.isNotEmpty() == true) {
-                                                    aiResultText.value += "思考内容：\n"
-                                                    aiResultText.value += jsstr.choices[0].message?.reasoning_content
-                                                }
-                                                aiResultText.value += "回答：\n"
-                                                aiResultText.value += jsstr.choices[0].message?.content
-                                            }
-                                        } catch (e: Exception) {
-                                            println(e.message)
-                                        }
-                                    },
-                                    onError = { str ->
-                                        aiResultText.value = "$requestFailedText$str"
-                                    }
-                                )
-                            }
-
-
-
-                        },
-                        modifier = Modifier.weight(2f).height(40.dp), // 占据更多空间
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary // 使用主题色
+                        val sendData = SendData(
+                            stream = streamInfo.value,
+                            config.modelName,
+                            listOf(
+                                SendMessage("system", prompt),
+                                SendMessage("user", questionText),
+                            ),
                         )
-                    ) {
-                        Text(if (explainMode) explainText else solveText, style = TextStyle(fontSize = 14.sp))
-                    }
+                        val jsonConfig = Json {
+                            ignoreUnknownKeys = true
+                            isLenient = true
+                            coerceInputValues = true
+                        }
+
+                        if (streamInfo.value) {
+                            HttpControl.sendStream(
+                                sendData,
+                                config.api,
+                                config.apiKey,
+                                onChunkReceived = { chunk ->
+                                    val jsonLine = if (chunk.startsWith("data: ")) {
+                                        chunk.substring("data: ".length)
+                                    } else {
+                                        chunk
+                                    }
+                                    if (chunk == ": keep-alive") {
+                                        return@sendStream
+                                    }
+                                    try {
+                                        val str = jsonConfig.decodeFromString<ChatResponse>(jsonLine)
+                                        if (str.choices.isNotEmpty()) {
+                                            if (str.choices[0].delta?.reasoning_content?.isNotEmpty() == true) {
+                                                aiResultText.value += str.choices[0].delta?.reasoning_content
+                                            }
+                                            aiResultText.value += str.choices[0].delta?.content
+                                        }
+                                    } catch (e: Exception) {
+                                        // 忽略无法解析的行（如 [DONE]）
+                                    }
+                                },
+                                onComplete = {
+                                    // 流式结束
+                                },
+                                onError = { error ->
+                                    aiResultText.value = "$requestFailedText$error"
+                                },
+                            )
+                        } else {
+                            aiResultText.value = "当前使用非流式输出，等待时间可能较长，请耐心等待！\n"
+                            HttpControl.send(
+                                sendData,
+                                config.api,
+                                config.apiKey,
+                                onSuccess = { str ->
+                                    try {
+                                        val jsstr = jsonConfig.decodeFromString<ChatResponse>(str)
+                                        if (jsstr.choices.isNotEmpty()) {
+                                            if (jsstr.choices[0].message?.reasoning_content?.isNotEmpty() == true) {
+                                                aiResultText.value += "思考内容：\n"
+                                                aiResultText.value += jsstr.choices[0].message?.reasoning_content
+                                            }
+                                            aiResultText.value += "回答：\n"
+                                            aiResultText.value += jsstr.choices[0].message?.content
+                                        }
+                                    } catch (e: Exception) {
+                                        // 忽略解析异常
+                                    }
+                                },
+                                onError = { str ->
+                                    aiResultText.value = "$requestFailedText$str"
+                                },
+                            )
+                        }
+                    },
+                    modifier = Modifier.weight(2f).height(Dimens.CompactControlHeight),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                    ),
+                ) {
+                    Text(
+                        if (explainMode) explainText else solveText,
+                        style = TextStyle(fontSize = 14.sp),
+                    )
                 }
             }
         }
     }
 }
 
+// 顶部栏：拖拽手柄 + 标题 + 收起/锁定/关闭
+@Composable
+private fun FloatingTopBar(
+    title: String,
+    isLocked: Boolean,
+    onCollapse: () -> Unit,
+    onToggleLock: () -> Unit,
+    onClose: () -> Unit,
+) {
+    Column {
+        // 拖拽手柄：下滑收起回气泡
+        val density = LocalDensity.current
+        var dragAccum by remember { mutableFloatStateOf(0f) }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(16.dp)
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures(
+                        onDragEnd = { dragAccum = 0f },
+                        onVerticalDrag = { _, dragAmount ->
+                            dragAccum += dragAmount
+                            if (dragAccum > with(density) { 60.dp.toPx() }) {
+                                dragAccum = 0f
+                                onCollapse()
+                            }
+                        },
+                    )
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(36.dp)
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(MaterialTheme.colorScheme.outlineVariant),
+            )
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Dimens.SpaceXs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = Dimens.SpaceSm),
+            )
+            IconButton(onClick = onCollapse, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowDown,
+                    contentDescription = "收起",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            IconButton(onClick = onToggleLock, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    imageVector = if (isLocked) Icons.Filled.Lock else Icons.Filled.LockOpen,
+                    contentDescription = if (isLocked) "锁定" else "解锁",
+                    tint = if (isLocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = "关闭",
+                    tint = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+    }
+}
+
+// 读屏结果列表：勾选后填入问题
+@Composable
+private fun ScreenTextList(
+    textList: List<ScanSearchData>,
+    textMap: MutableMap<String, ScanSearchData>,
+    fillQuestionText: String,
+    onConfirm: () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(Dimens.SpaceXs),
+        ) {
+            items(textList) { item ->
+                Surface(
+                    shape = RoundedCornerShape(Dimens.RadiusSm),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Dimens.SpaceXs),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(Dimens.SpaceSm),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = item.text,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = Dimens.SpaceSm),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Checkbox(
+                            checked = textMap[item.id]?.cheek ?: false,
+                            onCheckedChange = {
+                                textMap[item.id] = item.copy(cheek = it)
+                            },
+                            colors = CheckboxDefaults.colors(
+                                checkedColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+        Button(
+            onClick = onConfirm,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Dimens.SpaceSm),
+        ) {
+            Text(fillQuestionText)
+        }
+    }
+}
+
+// 回答结果列表：历史问答 + 当前答案
+@Composable
+private fun ResultList(
+    history: List<ChatItem>,
+    currentAnswer: String,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
+    ) {
+        items(history) { item ->
+            Column(modifier = Modifier.padding(horizontal = Dimens.SpaceSm)) {
+                if (item.question.isNotBlank()) {
+                    Text(
+                        text = item.question,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                MarkdownText(
+                    markdown = item.answer,
+                    isTextSelectable = true,
+                )
+            }
+        }
+        if (currentAnswer.isNotBlank()) {
+            item {
+                MarkdownText(
+                    modifier = Modifier.padding(horizontal = Dimens.SpaceSm),
+                    markdown = currentAnswer,
+                    isTextSelectable = true,
+                )
+            }
+        }
+    }
+}
 
 // 自定义操作按钮组件
 @Composable
@@ -650,44 +662,39 @@ private fun ActionButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    containerColor: Color = MaterialTheme.colorScheme.primaryContainer
+    containerColor: Color = MaterialTheme.colorScheme.primaryContainer,
 ) {
-    TextButton(
+    Button(
         onClick = onClick,
         modifier = modifier,
-        colors = ButtonDefaults.textButtonColors(
+        colors = ButtonDefaults.buttonColors(
             containerColor = containerColor,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
         ),
-        shape = RoundedCornerShape(8.dp) // 统一圆角
+        shape = RoundedCornerShape(Dimens.RadiusSm),
     ) {
         Text(text, style = TextStyle(fontSize = 13.sp))
     }
 }
 
-
+// 浮窗内的模型切换小 Chip
 @Composable
 fun ConfigMiniFilterChip(
     configData: ConfigData,
-    commonViewModel: CommonViewModel,
     isSelected: Boolean,
-    onSelect: (ConfigData) -> Unit
+    onSelect: (ConfigData) -> Unit,
 ) {
     FilterChip(
         modifier = Modifier.height(30.dp),
-        onClick = {
-            onSelect(configData)
-        },
-        label = {
-            Text(configData.name, style = TextStyle(fontSize = 12.sp))
-        },
+        onClick = { onSelect(configData) },
+        label = { Text(configData.name, style = TextStyle(fontSize = 12.sp)) },
         selected = isSelected,
         leadingIcon = if (isSelected) {
             {
                 Icon(
                     imageVector = Icons.Filled.Done,
                     contentDescription = "Done icon",
-                    modifier = Modifier.size(FilterChipDefaults.IconSize)
+                    modifier = Modifier.size(FilterChipDefaults.IconSize),
                 )
             }
         } else {
