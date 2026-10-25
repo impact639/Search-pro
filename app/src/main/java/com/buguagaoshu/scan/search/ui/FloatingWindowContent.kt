@@ -234,45 +234,30 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
             )
 
             // 内容区：读屏列表 / 回答结果 / 网页，占满剩余空间
-            Box(
+            ContentArea(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-            ) {
-                AnimatedVisibility(
-                    visible = isListVisible.value,
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    ScreenTextList(
-                        textList = textList,
-                        textMap = textMap,
-                        fillQuestionText = fillQuestionText,
-                        onConfirm = {
-                            val stringQuestion = StringBuilder()
-                            for (item: ScanSearchData in textList) {
-                                if (textMap[item.id]?.cheek == true) {
-                                    stringQuestion.append("${item.text}\n")
-                                }
-                            }
-                            commonViewModel.updateQuestionText(stringQuestion.toString())
-                            isListVisible.value = false
-                            showResultVisible.value = true
-                        },
-                    )
-                }
-                AnimatedVisibility(
-                    visible = showResultVisible.value,
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    ResultList(history = history, currentAnswer = aiResultText.value)
-                }
-                AnimatedVisibility(
-                    visible = showWebView.value,
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    MyWebView()
-                }
-            }
+                isListVisible = isListVisible.value,
+                showResultVisible = showResultVisible.value,
+                showWebView = showWebView.value,
+                textList = textList,
+                textMap = textMap,
+                fillQuestionText = fillQuestionText,
+                onConfirm = {
+                    val stringQuestion = StringBuilder()
+                    for (item: ScanSearchData in textList) {
+                        if (textMap[item.id]?.cheek == true) {
+                            stringQuestion.append("${item.text}\n")
+                        }
+                    }
+                    commonViewModel.updateQuestionText(stringQuestion.toString())
+                    isListVisible.value = false
+                    showResultVisible.value = true
+                },
+                history = history,
+                currentAnswer = aiResultText.value,
+            )
 
             HorizontalDivider(
                 color = MaterialTheme.colorScheme.outlineVariant,
@@ -477,6 +462,49 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                     )
                 }
             }
+        }
+    }
+}
+
+// 内容区：读屏列表 / 回答结果 / 网页 三态切换。
+// 独立成 composable（而非内联在 Column 里），避免 AnimatedVisibility 被解析成
+// ColumnScope 扩展导致「cannot be called in this context with an implicit receiver」。
+@Composable
+private fun ContentArea(
+    modifier: Modifier,
+    isListVisible: Boolean,
+    showResultVisible: Boolean,
+    showWebView: Boolean,
+    textList: List<ScanSearchData>,
+    textMap: MutableMap<String, ScanSearchData>,
+    fillQuestionText: String,
+    onConfirm: () -> Unit,
+    history: List<ChatItem>,
+    currentAnswer: String,
+) {
+    Box(modifier = modifier) {
+        AnimatedVisibility(
+            visible = isListVisible,
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            ScreenTextList(
+                textList = textList,
+                textMap = textMap,
+                fillQuestionText = fillQuestionText,
+                onConfirm = onConfirm,
+            )
+        }
+        AnimatedVisibility(
+            visible = showResultVisible,
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            ResultList(history = history, currentAnswer = currentAnswer)
+        }
+        AnimatedVisibility(
+            visible = showWebView,
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            MyWebView()
         }
     }
 }

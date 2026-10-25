@@ -196,14 +196,14 @@ fun HomePage(commonViewModel: CommonViewModel, openFloatingWindow: () -> Unit) {
                                 onSuccess = {
                                     android.widget.Toast.makeText(
                                         context,
-                                        stringResource(TextValue.test_connection_success),
+                                        context.getString(TextValue.test_connection_success),
                                         android.widget.Toast.LENGTH_SHORT,
                                     ).show()
                                 },
                                 onError = {
                                     android.widget.Toast.makeText(
                                         context,
-                                        "${stringResource(TextValue.test_connection_failed)}：$it",
+                                        "${context.getString(TextValue.test_connection_failed)}：$it",
                                         android.widget.Toast.LENGTH_SHORT,
                                     ).show()
                                 },
@@ -226,7 +226,7 @@ fun HomePage(commonViewModel: CommonViewModel, openFloatingWindow: () -> Unit) {
                             !url.startsWith("http://") && !url.startsWith("https://") -> {
                                 android.widget.Toast.makeText(
                                     context,
-                                    stringResource(TextValue.invalid_url),
+                                    context.getString(TextValue.invalid_url),
                                     android.widget.Toast.LENGTH_SHORT,
                                 ).show()
                             }
