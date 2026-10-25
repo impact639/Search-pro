@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.Application
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -102,6 +103,7 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
     val readScreenText = stringResource(TextValue.read_screen)
     val webText = stringResource(TextValue.web)
     val fillQuestionText = stringResource(TextValue.fill_question)
+    val moreText = stringResource(TextValue.more)
 
     val textList = remember { mutableStateListOf<ScanSearchData>() }
     val textMap = remember { mutableStateMapOf<String, ScanSearchData>() }
@@ -113,6 +115,7 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
 
     val showKeyboard = remember { mutableStateOf(false) }
     val streamInfo = remember { mutableStateOf(true) }
+    val moreExpanded = remember { mutableStateOf(false) }
 
     val questionText by commonViewModel.questionText.collectAsState()
     val prompt by commonViewModel.promptText.collectAsState()
@@ -178,52 +181,89 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                 onClose = { FxComposeControl.cancel() },
             )
 
-            // 次级控制区：模型切换 + 模式 + 流式
-            Column(
+            // 模式选择（核心，始终可见）+「更多」入口
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = Dimens.SpaceSm),
-                verticalArrangement = Arrangement.spacedBy(Dimens.SpaceXs),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceXs),
             ) {
-                Row(
+                Text(text = modeText, style = MaterialTheme.typography.labelMedium)
+                FilterChip(
+                    selected = explainMode,
+                    onClick = { commonViewModel.setPromptMode(true) },
+                    label = { Text(explainText, style = TextStyle(fontSize = 12.sp)) },
+                    modifier = Modifier.height(28.dp),
+                )
+                FilterChip(
+                    selected = !explainMode,
+                    onClick = { commonViewModel.setPromptMode(false) },
+                    label = { Text(solveText, style = TextStyle(fontSize = 12.sp)) },
+                    modifier = Modifier.height(28.dp),
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = moreText,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(Dimens.RadiusSm))
+                        .clickable { moreExpanded.value = !moreExpanded.value }
+                        .padding(horizontal = Dimens.SpaceSm, vertical = Dimens.SpaceXs),
+                )
+            }
+
+            // 更多：不常用功能（模型切换 / 流式 / 网页）
+            AnimatedVisibility(
+                visible = moreExpanded.value,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
+                        .padding(horizontal = Dimens.SpaceSm),
+                    verticalArrangement = Arrangement.spacedBy(Dimens.SpaceXs),
                 ) {
-                    configMap.forEach { (_, value) ->
-                        ConfigMiniFilterChip(
-                            configData = value,
-                            isSelected = value == selectedConfigData,
-                            onSelect = onSelectConfig,
-                        )
-                        Spacer(modifier = Modifier.width(2.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        configMap.forEach { (_, value) ->
+                            ConfigMiniFilterChip(
+                                configData = value,
+                                isSelected = value == selectedConfigData,
+                                onSelect = onSelectConfig,
+                            )
+                            Spacer(modifier = Modifier.width(2.dp))
+                        }
                     }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceXs),
-                ) {
-                    Text(text = modeText, style = MaterialTheme.typography.labelMedium)
-                    FilterChip(
-                        selected = explainMode,
-                        onClick = { commonViewModel.setPromptMode(true) },
-                        label = { Text(explainText, style = TextStyle(fontSize = 12.sp)) },
-                        modifier = Modifier.height(28.dp),
-                    )
-                    FilterChip(
-                        selected = !explainMode,
-                        onClick = { commonViewModel.setPromptMode(false) },
-                        label = { Text(solveText, style = TextStyle(fontSize = 12.sp)) },
-                        modifier = Modifier.height(28.dp),
-                    )
-                    Spacer(modifier = Modifier.weight(1f))
-                    Text(text = streamText, style = MaterialTheme.typography.labelMedium)
-                    Switch(
-                        checked = streamInfo.value,
-                        onCheckedChange = { streamInfo.value = it },
-                        modifier = Modifier.height(28.dp),
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(text = streamText, style = MaterialTheme.typography.labelMedium)
+                        Spacer(modifier = Modifier.weight(1f))
+                        Switch(
+                            checked = streamInfo.value,
+                            onCheckedChange = { streamInfo.value = it },
+                            modifier = Modifier.height(28.dp),
+                        )
+                    }
+                    ActionButton(
+                        text = webText,
+                        onClick = {
+                            isListVisible.value = false
+                            showResultVisible.value = false
+                            showWebView.value = true
+                            moreExpanded.value = false
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(Dimens.CompactControlHeight),
                     )
                 }
             }
@@ -253,7 +293,8 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                     }
                     commonViewModel.updateQuestionText(stringQuestion.toString())
                     isListVisible.value = false
-                    showResultVisible.value = true
+                    showResultVisible.value = false
+                    showWebView.value = false
                 },
                 history = history,
                 currentAnswer = aiResultText.value,
@@ -317,16 +358,6 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                         isListVisible.value = true
                         showWebView.value = false
                         showResultVisible.value = false
-                    },
-                    modifier = Modifier.weight(1f).height(Dimens.CompactControlHeight),
-                )
-
-                ActionButton(
-                    text = webText,
-                    onClick = {
-                        isListVisible.value = false
-                        showResultVisible.value = false
-                        showWebView.value = true
                     },
                     modifier = Modifier.weight(1f).height(Dimens.CompactControlHeight),
                 )
