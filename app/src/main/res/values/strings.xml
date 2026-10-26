@@ -50,4 +50,6 @@
     <string name="web">网页</string>
     <string name="fill_question">填入问题</string>
     <string name="more">更多</string>
+    <string name="reasoning_label">思考过程</string>
+    <string name="answer_label">最终答案</string>
 </resources>

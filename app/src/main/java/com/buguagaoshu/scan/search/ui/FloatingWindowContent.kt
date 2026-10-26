@@ -111,7 +111,8 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
     val isListVisible = remember { mutableStateOf(true) }
     val showResultVisible = remember { mutableStateOf(false) }
     val showWebView = remember { mutableStateOf(false) }
-    val aiResultText = remember { mutableStateOf("") }
+    val reasoningText = remember { mutableStateOf("") }
+    val answerText = remember { mutableStateOf("") }
 
     val showKeyboard = remember { mutableStateOf(false) }
     val streamInfo = remember { mutableStateOf(true) }
@@ -297,7 +298,8 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                     showWebView.value = false
                 },
                 history = history,
-                currentAnswer = aiResultText.value,
+                currentReasoning = reasoningText.value,
+                currentAnswer = answerText.value,
             )
 
             HorizontalDivider(
@@ -401,12 +403,13 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                         isListVisible.value = false
                         showWebView.value = false
                         showResultVisible.value = true
-                        // 归档上一条问答
-                        if (lastQuestion.isNotBlank() && aiResultText.value.isNotBlank()) {
-                            history.add(ChatItem(lastQuestion, aiResultText.value))
+                        // 归档上一条问答（含思考过程与最终答案）
+                        if (lastQuestion.isNotBlank() && (reasoningText.value.isNotBlank() || answerText.value.isNotBlank())) {
+                            history.add(ChatItem(lastQuestion, reasoningText.value, answerText.value))
                         }
                         lastQuestion = questionText
-                        aiResultText.value = ""
+                        reasoningText.value = ""
+                        answerText.value = ""
 
                         val sendData = SendData(
                             stream = streamInfo.value,
@@ -439,10 +442,15 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                                     try {
                                         val str = jsonConfig.decodeFromString<ChatResponse>(jsonLine)
                                         if (str.choices.isNotEmpty()) {
-                                            if (str.choices[0].delta?.reasoning_content?.isNotEmpty() == true) {
-                                                aiResultText.value += str.choices[0].delta?.reasoning_content
+                                            val delta = str.choices[0].delta
+                                            val reasoning = delta?.reasoning_content
+                                            if (reasoning?.isNotEmpty() == true) {
+                                                reasoningText.value += reasoning
                                             }
-                                            aiResultText.value += str.choices[0].delta?.content
+                                            val content = delta?.content
+                                            if (content?.isNotEmpty() == true) {
+                                                answerText.value += content
+                                            }
                                         }
                                     } catch (e: Exception) {
                                         // 忽略无法解析的行（如 [DONE]）
@@ -452,11 +460,11 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                                     // 流式结束
                                 },
                                 onError = { error ->
-                                    aiResultText.value = "$requestFailedText$error"
+                                    answerText.value = "$requestFailedText$error"
                                 },
                             )
                         } else {
-                            aiResultText.value = "当前使用非流式输出，等待时间可能较长，请耐心等待！\n"
+                            answerText.value = "当前使用非流式输出，等待时间可能较长，请耐心等待！\n"
                             HttpControl.send(
                                 sendData,
                                 config.api,
@@ -465,19 +473,19 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                                     try {
                                         val jsstr = jsonConfig.decodeFromString<ChatResponse>(str)
                                         if (jsstr.choices.isNotEmpty()) {
-                                            if (jsstr.choices[0].message?.reasoning_content?.isNotEmpty() == true) {
-                                                aiResultText.value += "思考内容：\n"
-                                                aiResultText.value += jsstr.choices[0].message?.reasoning_content
+                                            jsstr.choices[0].message?.reasoning_content?.let {
+                                                if (it.isNotBlank()) reasoningText.value = it
                                             }
-                                            aiResultText.value += "回答：\n"
-                                            aiResultText.value += jsstr.choices[0].message?.content
+                                            jsstr.choices[0].message?.content?.let {
+                                                answerText.value = it
+                                            }
                                         }
                                     } catch (e: Exception) {
                                         // 忽略解析异常
                                     }
                                 },
                                 onError = { str ->
-                                    aiResultText.value = "$requestFailedText$str"
+                                    answerText.value = "$requestFailedText$str"
                                 },
                             )
                         }
@@ -511,6 +519,7 @@ private fun ContentArea(
     fillQuestionText: String,
     onConfirm: () -> Unit,
     history: List<ChatItem>,
+    currentReasoning: String,
     currentAnswer: String,
 ) {
     Box(modifier = modifier) {
@@ -529,7 +538,7 @@ private fun ContentArea(
             visible = showResultVisible,
             modifier = Modifier.fillMaxSize(),
         ) {
-            ResultList(history = history, currentAnswer = currentAnswer)
+            ResultList(history = history, currentReasoning = currentReasoning, currentAnswer = currentAnswer)
         }
         AnimatedVisibility(
             visible = showWebView,
@@ -682,35 +691,94 @@ private fun ScreenTextList(
 @Composable
 private fun ResultList(
     history: List<ChatItem>,
+    currentReasoning: String,
     currentAnswer: String,
 ) {
+    val reasoningLabel = stringResource(TextValue.reasoning_label)
+    val answerLabel = stringResource(TextValue.answer_label)
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
     ) {
         items(history) { item ->
-            Column(modifier = Modifier.padding(horizontal = Dimens.SpaceSm)) {
-                if (item.question.isNotBlank()) {
-                    Text(
-                        text = item.question,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-                MarkdownText(
-                    markdown = item.answer,
-                    isTextSelectable = true,
+            AnswerBlock(
+                question = item.question,
+                reasoning = item.reasoning,
+                answer = item.answer,
+                reasoningLabel = reasoningLabel,
+                answerLabel = answerLabel,
+            )
+        }
+        if (currentAnswer.isNotBlank() || currentReasoning.isNotBlank()) {
+            item {
+                AnswerBlock(
+                    question = "",
+                    reasoning = currentReasoning,
+                    answer = currentAnswer,
+                    reasoningLabel = reasoningLabel,
+                    answerLabel = answerLabel,
                 )
             }
         }
-        if (currentAnswer.isNotBlank()) {
-            item {
+    }
+}
+
+// 单条回答：问题 + 思考过程（可选）+ 最终答案，两部分清晰分开
+@Composable
+private fun AnswerBlock(
+    question: String,
+    reasoning: String,
+    answer: String,
+    reasoningLabel: String,
+    answerLabel: String,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Dimens.SpaceSm),
+    ) {
+        if (question.isNotBlank()) {
+            Text(
+                text = question,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(modifier = Modifier.height(Dimens.SpaceXs))
+        }
+        if (reasoning.isNotBlank()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(Dimens.RadiusSm))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(Dimens.SpaceSm),
+            ) {
+                Text(
+                    text = reasoningLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(modifier = Modifier.height(Dimens.SpaceXs))
                 MarkdownText(
-                    modifier = Modifier.padding(horizontal = Dimens.SpaceSm),
-                    markdown = currentAnswer,
+                    markdown = reasoning,
                     isTextSelectable = true,
                 )
             }
+            Spacer(modifier = Modifier.height(Dimens.SpaceSm))
+        }
+        if (answer.isNotBlank()) {
+            if (reasoning.isNotBlank()) {
+                Text(
+                    text = answerLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(modifier = Modifier.height(Dimens.SpaceXs))
+            }
+            MarkdownText(
+                markdown = answer,
+                isTextSelectable = true,
+            )
         }
     }
 }
@@ -763,4 +831,4 @@ fun ConfigMiniFilterChip(
 }
 
 // 聊天记录条目
-private data class ChatItem(val question: String, val answer: String)
+private data class ChatItem(val question: String, val reasoning: String, val answer: String)
