@@ -107,6 +107,10 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
     val webText = stringResource(TextValue.web)
     val fillQuestionText = stringResource(TextValue.fill_question)
     val moreText = stringResource(TextValue.more)
+    val sizeText = stringResource(TextValue.size)
+    val sizeSmallText = stringResource(TextValue.size_small)
+    val sizeMediumText = stringResource(TextValue.size_medium)
+    val sizeLargeText = stringResource(TextValue.size_large)
 
     val textList = remember { mutableStateListOf<ScanSearchData>() }
     val textMap = remember { mutableStateMapOf<String, ScanSearchData>() }
@@ -120,6 +124,15 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
     val showKeyboard = remember { mutableStateOf(false) }
     val streamInfo = remember { mutableStateOf(true) }
     val moreExpanded = remember { mutableStateOf(false) }
+
+    // 尺寸预设档位：小 / 中 / 大（改 Card 尺寸后窗口按 WRAP_CONTENT 自动重测）
+    val sizePresets = listOf(
+        260.dp to 480.dp,
+        300.dp to 600.dp,
+        340.dp to 700.dp,
+    )
+    val sizeLabels = listOf(sizeSmallText, sizeMediumText, sizeLargeText)
+    var sizeIndex by remember { mutableStateOf(1) }
 
     val questionText by commonViewModel.questionText.collectAsState()
     val prompt by commonViewModel.promptText.collectAsState()
@@ -171,7 +184,10 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
 
     Card(
         shape = RoundedCornerShape(Dimens.RadiusLg),
-        modifier = Modifier.size(width = Dimens.FloatingWidth, height = Dimens.FloatingHeight),
+        modifier = Modifier.size(
+            width = sizePresets[sizeIndex].first,
+            height = sizePresets[sizeIndex].second,
+        ),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface,
         ),
@@ -256,6 +272,21 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                             onCheckedChange = { streamInfo.value = it },
                             modifier = Modifier.height(28.dp),
                         )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceXs),
+                    ) {
+                        Text(text = sizeText, style = MaterialTheme.typography.labelMedium)
+                        sizeLabels.forEachIndexed { index, label ->
+                            FilterChip(
+                                selected = sizeIndex == index,
+                                onClick = { sizeIndex = index },
+                                label = { Text(label, style = TextStyle(fontSize = 12.sp)) },
+                                modifier = Modifier.height(28.dp),
+                            )
+                        }
                     }
                     ActionButton(
                         text = webText,
