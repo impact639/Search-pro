@@ -773,10 +773,7 @@ private fun AnswerBlock(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(modifier = Modifier.height(Dimens.SpaceXs))
-                MarkdownText(
-                    markdown = reasoning,
-                    isTextSelectable = true,
-                )
+                AppMarkdown(markdown = reasoning)
             }
             Spacer(modifier = Modifier.height(Dimens.SpaceSm))
         }
@@ -789,12 +786,21 @@ private fun AnswerBlock(
                 )
                 Spacer(modifier = Modifier.height(Dimens.SpaceXs))
             }
-            MarkdownText(
-                markdown = answer,
-                isTextSelectable = true,
-            )
+            AppMarkdown(markdown = answer)
         }
     }
+}
+
+// 主题感知的 Markdown 渲染：代码块背景/文字随深浅色主题切换，链接高亮
+@Composable
+private fun AppMarkdown(markdown: String) {
+    MarkdownText(
+        markdown = markdown,
+        isTextSelectable = true,
+        linkColor = MaterialTheme.colorScheme.primary,
+        syntaxHighlightColor = MaterialTheme.colorScheme.surfaceVariant,
+        syntaxHighlightTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 // 自定义操作按钮组件
