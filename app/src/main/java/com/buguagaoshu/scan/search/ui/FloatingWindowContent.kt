@@ -8,7 +8,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,12 +22,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Done
-import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
@@ -95,8 +94,6 @@ fun FloatingWindowContentPreview() {
 @SuppressLint("UnrememberedMutableState")
 @Composable
 fun FloatingWindowContent(commonViewModel: CommonViewModel) {
-    val closeKeyBoard = stringResource(TextValue.close_keyboard)
-    val openKeyBoard = stringResource(TextValue.open_keyboard)
     val streamText = stringResource(TextValue.stream)
     val requestFailedText = stringResource(TextValue.request_failed)
     val modeText = stringResource(TextValue.mode)
@@ -121,7 +118,6 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
     val reasoningText = remember { mutableStateOf("") }
     val answerText = remember { mutableStateOf("") }
 
-    val showKeyboard = remember { mutableStateOf(false) }
     val streamInfo = remember { mutableStateOf(true) }
     val moreExpanded = remember { mutableStateOf(false) }
 
@@ -351,14 +347,10 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                     .fillMaxWidth()
                     .padding(horizontal = Dimens.SpaceSm)
                     .pointerInput(Unit) {
-                        // 点击输入框自动弹出键盘（不消费事件，不干扰光标/选中）
+                        // 点击输入框即弹出键盘（不消费事件，不干扰光标/选中）
                         awaitEachGesture {
                             awaitFirstDown(requireUnconsumed = false)
-                            val up = waitForUpOrCancellation()
-                            if (up != null) {
-                                showKeyboard.value = true
-                                FxInputHelper.showKeyBoard("ScanSearch", view)
-                            }
+                            FxInputHelper.showKeyBoard("ScanSearch", view)
                         }
                     },
             )
@@ -408,29 +400,6 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                     },
                     modifier = Modifier.weight(1f).height(Dimens.CompactControlHeight),
                 )
-
-                IconButton(
-                    onClick = {
-                        if (!showKeyboard.value) {
-                            showKeyboard.value = true
-                            FxInputHelper.showKeyBoard("ScanSearch", view)
-                        } else {
-                            showKeyboard.value = false
-                            FxInputHelper.hideKeyBoard("ScanSearch", view)
-                        }
-                    },
-                    modifier = Modifier.size(Dimens.CompactControlHeight),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Keyboard,
-                        contentDescription = if (showKeyboard.value) closeKeyBoard else openKeyBoard,
-                        tint = if (showKeyboard.value) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
-                }
 
                 Button(
                     onClick = submit@{
@@ -741,7 +710,16 @@ private fun ResultList(
 ) {
     val reasoningLabel = stringResource(TextValue.reasoning_label)
     val answerLabel = stringResource(TextValue.answer_label)
+    val listState = rememberLazyListState()
+    // 新内容到达时自动滚动到底部，跟随最新回答（无需手动下滑）
+    LaunchedEffect(history.size, currentReasoning.length, currentAnswer.length) {
+        val count = listState.layoutInfo.totalItemsCount
+        if (count > 0) {
+            listState.scrollToItem(count - 1)
+        }
+    }
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
     ) {
