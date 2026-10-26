@@ -5,7 +5,10 @@ import android.app.Application
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -315,7 +318,18 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                 shape = RoundedCornerShape(Dimens.RadiusSm),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = Dimens.SpaceSm),
+                    .padding(horizontal = Dimens.SpaceSm)
+                    .pointerInput(Unit) {
+                        // 点击输入框自动弹出键盘（不消费事件，不干扰光标/选中）
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false)
+                            val up = waitForUpOrCancellation()
+                            if (up != null) {
+                                showKeyboard.value = true
+                                FxInputHelper.showKeyBoard("ScanSearch", view)
+                            }
+                        }
+                    },
             )
 
             // 底部操作区
