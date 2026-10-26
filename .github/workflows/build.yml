@@ -25,6 +25,12 @@ jobs:
           SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
           yes | "${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
 
+      - name: Cache debug keystore (stable signature so reinstall keeps app data)
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: debug-keystore-v1
+
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
