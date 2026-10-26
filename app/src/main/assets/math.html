@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<link rel="stylesheet" href="katex.min.css">
+<style>
+  :root {
+    --bg: #ffffff;
+    --text: #1a1b1e;
+    --muted: #5f6368;
+    --border: #d9dde3;
+    --code-bg: #f1f3f5;
+    --block-bg: #f6f8fa;
+    --link: #4355b9;
+  }
+  body.dark {
+    --bg: #1a1c1f;
+    --text: #e4e6ea;
+    --muted: #9aa0a6;
+    --border: #3c4043;
+    --code-bg: #2a2d31;
+    --block-bg: #26282c;
+    --link: #a9b7ff;
+  }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 15px; line-height: 1.65; word-wrap: break-word;
+    padding: 10px 12px 20px;
+    -webkit-text-size-adjust: 100%;
+  }
+  #content { max-width: 100%; }
+  h1,h2,h3,h4 { line-height: 1.3; margin: 0.8em 0 0.35em; font-weight: 600; }
+  h1 { font-size: 1.35em; } h2 { font-size: 1.2em; } h3 { font-size: 1.08em; } h4 { font-size: 1em; }
+  p { margin: 0.45em 0; }
+  strong { font-weight: 600; }
+  a { color: var(--link); }
+  code {
+    font-family: "SF Mono", "JetBrains Mono", Consolas, "Courier New", monospace;
+    background: var(--code-bg); border-radius: 4px; padding: 0.1em 0.35em; font-size: 0.88em;
+  }
+  pre {
+    background: var(--block-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; overflow-x: auto; margin: 0.6em 0;
+  }
+  pre code { background: none; padding: 0; }
+  blockquote {
+    border-left: 3px solid var(--border); margin: 0.6em 0; padding: 0.15em 0.85em; color: var(--muted);
+  }
+  table { border-collapse: collapse; margin: 0.6em 0; max-width: 100%; }
+  th, td { border: 1px solid var(--border); padding: 4px 9px; }
+  ul, ol { padding-left: 1.5em; margin: 0.4em 0; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 1em 0; }
+  .katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.3em 0; margin: 0.4em 0; }
+</style>
+</head>
+<body>
+<div id="content"></div>
+<script src="markdown-it.min.js"></script>
+<script src="katex.min.js"></script>
+<script>
+  var md = window.markdownit({ html: false, breaks: true, linkify: true });
+  var katexMath = [];
+
+  // 先把 $...$（行内）与 $$...$$（块级）摘出来保护，避免 markdown-it 把公式里的下划线/星号当标记
+  function protectMath(text) {
+    katexMath = [];
+    text = text.replace(/\$\$([\s\S]+?)\$\$/g, function (_, tex) {
+      var id = katexMath.length;
+      katexMath.push({ tex: tex, display: true });
+      return '@@KTXMATH' + id + '@@';
+    });
+    text = text.replace(/\$([^$\n]+?)\$/g, function (_, tex) {
+      var id = katexMath.length;
+      katexMath.push({ tex: tex, display: false });
+      return '@@KTXMATH' + id + '@@';
+    });
+    return text;
+  }
+
+  function render(text, dark) {
+    document.body.className = dark ? 'dark' : '';
+    var protectedText = protectMath(text || '');
+    var html = md.render(protectedText);
+    html = html.replace(/@@KTXMATH(\d+)@@/g, function (_, i) {
+      var item = katexMath[parseInt(i, 10)];
+      if (!item) return '';
+      try {
+        return katex.renderToString(item.tex, { displayMode: item.display, throwOnError: false, strict: false });
+      } catch (e) {
+        return '<code>' + item.tex.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</code>';
+      }
+    });
+    document.getElementById('content').innerHTML = html;
+    window.scrollTo(0, document.body.scrollHeight);
+  }
+</script>
+</body>
+</html>

@@ -9,6 +9,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,7 +23,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -80,7 +80,6 @@ import com.buguagaoshu.scan.search.data.SendData
 import com.buguagaoshu.scan.search.data.SendMessage
 import com.buguagaoshu.scan.search.ui.theme.Dimens
 import com.petterp.floatingx.util.FxInputHelper
-import dev.jeziellago.compose.markdowntext.MarkdownText
 import kotlinx.serialization.json.Json
 import com.buguagaoshu.scan.search.R.string as TextValue
 
@@ -701,7 +700,7 @@ private fun ScreenTextList(
     }
 }
 
-// 回答结果列表：历史问答 + 当前答案
+// 回答结果：把历史问答 + 当前答案拼成 Markdown，用 WebView + KaTeX 渲染（支持数学公式）
 @Composable
 private fun ResultList(
     history: List<ChatItem>,
@@ -710,106 +709,45 @@ private fun ResultList(
 ) {
     val reasoningLabel = stringResource(TextValue.reasoning_label)
     val answerLabel = stringResource(TextValue.answer_label)
-    val listState = rememberLazyListState()
-    // 新内容到达时自动滚动到底部，跟随最新回答（无需手动下滑）
-    LaunchedEffect(history.size, currentReasoning.length, currentAnswer.length) {
-        val count = listState.layoutInfo.totalItemsCount
-        if (count > 0) {
-            listState.scrollToItem(count - 1)
-        }
+    val dark = isSystemInDarkTheme()
+    val markdown = remember(history, currentReasoning, currentAnswer, reasoningLabel, answerLabel) {
+        buildConversationMarkdown(history, currentReasoning, currentAnswer, reasoningLabel, answerLabel)
     }
-    LazyColumn(
-        state = listState,
+    MathMarkdownView(
+        markdown = markdown,
+        dark = dark,
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
-    ) {
-        items(history) { item ->
-            AnswerBlock(
-                question = item.question,
-                reasoning = item.reasoning,
-                answer = item.answer,
-                reasoningLabel = reasoningLabel,
-                answerLabel = answerLabel,
-            )
-        }
-        if (currentAnswer.isNotBlank() || currentReasoning.isNotBlank()) {
-            item {
-                AnswerBlock(
-                    question = "",
-                    reasoning = currentReasoning,
-                    answer = currentAnswer,
-                    reasoningLabel = reasoningLabel,
-                    answerLabel = answerLabel,
-                )
-            }
-        }
-    }
+    )
 }
 
-// 单条回答：问题 + 思考过程（可选）+ 最终答案，两部分清晰分开
-@Composable
-private fun AnswerBlock(
-    question: String,
-    reasoning: String,
-    answer: String,
+// 拼装整段会话的 Markdown（问题 + 思考过程 + 最终答案，用 --- 分隔）
+private fun buildConversationMarkdown(
+    history: List<ChatItem>,
+    currentReasoning: String,
+    currentAnswer: String,
     reasoningLabel: String,
     answerLabel: String,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = Dimens.SpaceSm),
-    ) {
-        if (question.isNotBlank()) {
-            Text(
-                text = question,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Spacer(modifier = Modifier.height(Dimens.SpaceXs))
+): String {
+    val sb = StringBuilder()
+    for (item in history) {
+        if (item.question.isNotBlank()) {
+            sb.append("**问题**：").append(item.question).append("\n\n")
         }
-        if (reasoning.isNotBlank()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(Dimens.RadiusSm))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(Dimens.SpaceSm),
-            ) {
-                Text(
-                    text = reasoningLabel,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(modifier = Modifier.height(Dimens.SpaceXs))
-                AppMarkdown(markdown = reasoning)
-            }
-            Spacer(modifier = Modifier.height(Dimens.SpaceSm))
+        if (item.reasoning.isNotBlank()) {
+            sb.append("**").append(reasoningLabel).append("**：\n\n").append(item.reasoning).append("\n\n")
         }
-        if (answer.isNotBlank()) {
-            if (reasoning.isNotBlank()) {
-                Text(
-                    text = answerLabel,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(modifier = Modifier.height(Dimens.SpaceXs))
-            }
-            AppMarkdown(markdown = answer)
+        if (item.answer.isNotBlank()) {
+            sb.append("**").append(answerLabel).append("**：\n\n").append(item.answer).append("\n\n")
         }
+        sb.append("---\n\n")
     }
-}
-
-// 主题感知的 Markdown 渲染：代码块背景/文字随深浅色主题切换，链接高亮
-@Composable
-private fun AppMarkdown(markdown: String) {
-    MarkdownText(
-        markdown = markdown,
-        isTextSelectable = true,
-        linkColor = MaterialTheme.colorScheme.primary,
-        syntaxHighlightColor = MaterialTheme.colorScheme.surfaceVariant,
-        syntaxHighlightTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+    if (currentReasoning.isNotBlank()) {
+        sb.append("**").append(reasoningLabel).append("**：\n\n").append(currentReasoning).append("\n\n")
+    }
+    if (currentAnswer.isNotBlank()) {
+        sb.append("**").append(answerLabel).append("**：\n\n").append(currentAnswer).append("\n\n")
+    }
+    return sb.toString()
 }
 
 // 自定义操作按钮组件

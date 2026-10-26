@@ -45,7 +45,6 @@ android {
 
 dependencies {
     implementation(libs.hilt.android)
-    implementation(libs.compose.markdown)
     implementation(libs.floatingx)
     implementation(libs.floatingx.compose)
     implementation(libs.okhttp)
