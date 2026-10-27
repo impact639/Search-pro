@@ -148,6 +148,18 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
         }
     }
 
+    // 第三方分享文字：自动填入输入框；已有未提交内容时改为追加，不覆盖
+    val sharedEvent by StaticVariableConfig.sharedTextFlow.collectAsState()
+    LaunchedEffect(sharedEvent) {
+        val ev = sharedEvent ?: return@LaunchedEffect
+        if (ev.text.isBlank()) return@LaunchedEffect
+        val current = commonViewModel.questionText.value
+        commonViewModel.updateQuestionText(
+            if (current.isBlank()) ev.text
+            else current.trimEnd() + "\n" + ev.text
+        )
+    }
+
     // 轻量聊天记录（内存态，可回看上次回答）
     val history = remember { mutableStateListOf<ChatItem>() }
     var lastQuestion by remember { mutableStateOf("") }

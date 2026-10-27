@@ -24,14 +24,13 @@ import kotlinx.serialization.json.Json
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val activityScope = lifecycleScope
+    private val commonViewModel: CommonViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val commonViewModel : CommonViewModel by viewModels()
 
         enableEdgeToEdge()
         setContent {
-
             SearchTheme {
                 HomePage(commonViewModel, openFloatingWindow = {
                     FxComposeControl.install(application, commonViewModel)
@@ -50,6 +49,25 @@ class MainActivity : ComponentActivity() {
             startActivity(intent)
         }
 
+        // 处理第三方分享的文字（ACTION_SEND / text/plain）
+        handleShareIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleShareIntent(intent)
+    }
+
+    // 接收第三方分享的文字，推送给悬浮窗输入框
+    private fun handleShareIntent(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_SEND) return
+        if (intent.type?.startsWith("text/") != true) return
+        val text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.trim()
+        if (text.isNullOrBlank()) return
+        StaticVariableConfig.postSharedText(text)
+        // 打开主浮窗（已安装则显示），让用户看到填入的问题
+        FxComposeControl.openSearchWindow(application, commonViewModel)
     }
 
     // 检查无障碍权限

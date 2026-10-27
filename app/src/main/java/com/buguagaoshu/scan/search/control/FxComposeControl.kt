@@ -49,6 +49,13 @@ object FxComposeControl {
         installMinimize(context)
     }
 
+    // 打开主浮窗：未安装则安装，已安装（可能收起为气泡）则显示；同时隐藏小气泡
+    fun openSearchWindow(context: Application, commonViewModel: CommonViewModel) {
+        install(context, commonViewModel)
+        FloatingX.controlOrNull(_TAG)?.show()
+        FloatingX.controlOrNull(_minimize_tag)?.hide()
+    }
+
     fun cancel() {
         // 关闭无障碍服务
         StaticVariableConfig.openScan = false
