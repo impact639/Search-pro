@@ -11,17 +11,17 @@ import kotlin.uuid.Uuid
 class ScreenReaderService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
-        if (!StaticVariableConfig.openScan) {
-            return
-        }
-
-        // 划词：捕获用户选中的文字
+        // 划词（选中文字）始终捕获，不依赖浮窗是否已打开，避免进程重启后 openScan 复位导致划词失效
         if (event.eventType == AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED) {
             handleTextSelection(event)
             return
         }
 
-        // 监听滑动事件，读取全屏文本（兜底）
+        // 读屏（全屏文本）仅在浮窗运行中捕获，避免无谓遍历
+        if (!StaticVariableConfig.openScan) {
+            return
+        }
+
         if (event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED ||
             event.eventType == AccessibilityEvent.TYPE_VIEW_HOVER_ENTER
         ) {
@@ -33,6 +33,19 @@ class ScreenReaderService : AccessibilityService() {
 
     @OptIn(ExperimentalUuidApi::class)
     private fun handleTextSelection(event: AccessibilityEvent) {
+        // 方式一：事件自带的文本 + 选区范围（getFromIndex/getToIndex 专为选区事件设计，API 26+）
+        val eventText = event.text?.joinToString("") ?: ""
+        val from = event.fromIndex
+        val to = event.toIndex
+        if (from >= 0 && to > from && to <= eventText.length) {
+            val selected = eventText.substring(from, to).trim()
+            if (selected.isNotEmpty()) {
+                StaticVariableConfig.selectedTextFlow.value = selected
+                return
+            }
+        }
+
+        // 方式二：从事件源节点读取选中文字（部分 App 只在这一层给出选区）
         val source = event.source ?: return
         try {
             val start = source.textSelectionStart
