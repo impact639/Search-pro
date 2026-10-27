@@ -18,6 +18,19 @@
 
 [更新日志](/CHANGELOG.md)
 
+## 本轮技术排查与功能完善
+
+见 [技术排查与验收报告](/doc/技术排查与验收报告.md)。
+
+新增/修复要点：
+
+- **回答等待优化**：流式 SSE 正确解析、读超时/取消、全链路耗时埋点（`adb logcat -s ScanSearchTime`）、生成中加载提示。
+- **第三方分享**：接收范围从 `text/plain` 放宽到 `text/*`，且追加不覆盖未提交内容。
+- **识屏 OCR**：点浮窗「识屏」→ 授权屏幕捕获 → 框选区域 → ML Kit 中文识别 → 回填输入框（应对微信/QQ 等不可划词场景）。
+- **去思考过程**：回答只显示「详细讲解 / 最终答案」，不再展示模型内部推理。
+
+新增权限（安装时可能提示）：`FOREGROUND_SERVICE`、`FOREGROUND_SERVICE_MEDIA_PROJECTION`、`POST_NOTIFICATIONS`（均为识屏所需）。
+
 ## 运行展示
 
 https://www.bilibili.com/video/BV1PrNweHEDX
@@ -153,6 +166,9 @@ API申请地址：https://www.aliyun.com/minisite/goods?userCode=4i6gwidx
 - [x] 移动悬浮窗
 - [x] 悬浮窗最小化功能，这样就可以实现利用 Android 手机自带读取屏幕功能搜索，例如小米的超级小爱
 - [x] 利用 WebView 显示搜索引擎或其它大模型的结果，部分完成
+- [x] 屏幕框选 OCR（MediaProjection + ML Kit 中文识别）
+- [x] 接收第三方分享纯文本（text/*）
+- [x] 划词自动填入
 - [ ] 聊天历史记录
 - [ ] 自建题库
 - [X] UI 优化
