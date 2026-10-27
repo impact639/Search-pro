@@ -137,7 +137,7 @@ object HttpControl {
                             if (body == null) {
                                 postMain { onError("响应体为空") }
                             } else {
-                                parseSse(body.charStream().bufferedReader(), t0, onChunkReceived, onComplete)
+                                parseSse(java.io.BufferedReader(body.charStream()), t0, onChunkReceived, onComplete)
                             }
                         }
                     }
