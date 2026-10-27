@@ -120,7 +120,9 @@ class ScreenCaptureActivity : ComponentActivity() {
     private fun startScreenCapture(resultCode: Int, data: Intent) {
         statusText = "正在捕获屏幕…"
 
-        // Android 14+ 必须先启动 mediaProjection 前台服务
+        // Android 14+ 必须先有 mediaProjection 前台服务在运行。startForegroundService 是异步的，
+        // 把真正的捕获 post 到下一轮主线程循环，确保服务已调用 startForeground 后再 getMediaProjection，
+        // 避免 SecurityException（后台悬浮窗路径下前台服务可能尚未就绪）。
         val serviceIntent = Intent(this, ScreenCaptureService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(serviceIntent)
@@ -128,6 +130,12 @@ class ScreenCaptureActivity : ComponentActivity() {
             startService(serviceIntent)
         }
 
+        Handler(Looper.getMainLooper()).post {
+            startCapture(resultCode, data)
+        }
+    }
+
+    private fun startCapture(resultCode: Int, data: Intent) {
         mediaProjection = mediaProjectionManager.getMediaProjection(resultCode, data)
         mediaProjection?.registerCallback(object : MediaProjection.Callback() {
             override fun onStop() {

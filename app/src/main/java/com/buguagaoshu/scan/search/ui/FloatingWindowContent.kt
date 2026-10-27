@@ -81,6 +81,7 @@ import com.buguagaoshu.scan.search.data.ConfigData
 import com.buguagaoshu.scan.search.data.ScanSearchData
 import com.buguagaoshu.scan.search.data.SendData
 import com.buguagaoshu.scan.search.data.SendMessage
+import com.buguagaoshu.scan.search.service.ScreenCaptureService
 import com.buguagaoshu.scan.search.ui.theme.Dimens
 import com.petterp.floatingx.util.FxInputHelper
 import kotlinx.serialization.json.Json
@@ -426,11 +427,21 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                     text = captureScreenText,
                     onClick = {
                         moreExpanded.value = false
-                        // 先收起浮窗避免被截进图里，再进入框选界面
+                        // 先收起浮窗避免被截进图里
                         FxComposeControl.hideSearch(application)
-                        val intent = Intent(context, ScreenCaptureActivity::class.java)
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        context.startActivity(intent)
+                        // 后台悬浮窗直接 startActivity 会被 Android 10+ 静默拦截（点了没反应），
+                        // 改由 mediaProjection 前台服务豁免限制后拉起识屏界面
+                        val serviceIntent = Intent(context, ScreenCaptureService::class.java).apply {
+                            action = ScreenCaptureService.ACTION_LAUNCH
+                        }
+                        try {
+                            context.startForegroundService(serviceIntent)
+                        } catch (e: Exception) {
+                            // 兜底：个别系统禁止后台启动前台服务时，直接尝试启动识屏 Activity
+                            val intent = Intent(context, ScreenCaptureActivity::class.java)
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            context.startActivity(intent)
+                        }
                     },
                     modifier = Modifier.weight(1f).height(Dimens.CompactControlHeight),
                 )

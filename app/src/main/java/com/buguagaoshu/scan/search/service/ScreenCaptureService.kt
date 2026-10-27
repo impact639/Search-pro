@@ -9,20 +9,33 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.buguagaoshu.scan.search.R
+import com.buguagaoshu.scan.search.ScreenCaptureActivity
 
 /**
  * 屏幕捕获前台服务。
  *
- * Android 14（targetSdk 34）起，调用 MediaProjectionManager.getMediaProjection() 前必须有一个
+ * 职责 1：Android 14（targetSdk 34）起，调用 MediaProjectionManager.getMediaProjection() 前必须有一个
  * foregroundServiceType="mediaProjection" 的前台服务在运行，否则抛 SecurityException。
- * 本服务仅用于满足该约束并展示一条「正在捕获屏幕」的通知，捕获结束后立即 stopService。
+ * 职责 2：前台服务豁免「后台启动 Activity」限制，悬浮窗先启动本服务，再由本服务拉起识屏界面，
+ * 避免从后台悬浮窗直接 startActivity 被系统静默拦截（表现为点了没反应）。
  */
 class ScreenCaptureService : Service() {
+
+    companion object {
+        // 悬浮窗「识屏」入口标记：仅该来源才拉起识屏 Activity，避免识屏 Activity 为满足 Android 14
+        // 再次 startForegroundService 时重复拉起 Activity。
+        const val ACTION_LAUNCH = "com.buguagaoshu.scan.search.action.LAUNCH_SCREEN_CAPTURE"
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForegroundWithType()
+        if (intent?.action == ACTION_LAUNCH) {
+            val activityIntent = Intent(this, ScreenCaptureActivity::class.java)
+            activityIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(activityIntent)
+        }
         return START_NOT_STICKY
     }
 
