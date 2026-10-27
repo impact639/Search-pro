@@ -427,6 +427,7 @@ private fun ConfigEditCard(
                 value = modelName,
                 onValueChange = { commonViewModel.updateModelName(it) },
                 label = { Text(stringResource(TextValue.please_enter_model_name)) },
+                placeholder = { Text(stringResource(TextValue.model_name_hint)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )

@@ -4,6 +4,7 @@
     <string name="config_file_name">配置文件名称</string>
     <string name="please_enter_server_address">请输入服务器地址</string>
     <string name="please_enter_model_name">请输入模型名称</string>
+    <string name="model_name_hint">如 deepseek-chat（快速，推荐）；推理型用 deepseek-reasoner（慢）</string>
     <string name="please_enter_API_Key">请输入API Key</string>
     <string name="customize_the_prompt">自定义提示词</string>
     <string name="save_config">保存配置</string>

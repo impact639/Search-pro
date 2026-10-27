@@ -76,6 +76,16 @@ class ScreenCaptureActivity : ComponentActivity() {
     private var statusText by mutableStateOf("正在请求屏幕捕获授权…")
     private var error by mutableStateOf(false)
 
+    // 截图超时兜底：授权成功但长时间拿不到帧（系统未生成画面 / 投影失败）时，
+    // 显示错误页而非一直停留在透明窗口（用户看到的「卡住」）。
+    private val captureTimeout = Runnable {
+        if (bitmap == null && !error) {
+            error = true
+            statusText = "截图超时，请重试"
+            cleanup()
+        }
+    }
+
     private val captureLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -130,14 +140,51 @@ class ScreenCaptureActivity : ComponentActivity() {
             startService(serviceIntent)
         }
 
-        Handler(Looper.getMainLooper()).post {
-            startCapture(resultCode, data)
-        }
+        // 延迟到下一轮主线程，并给前台服务足够时间完成 startForeground，
+        // 避免 getMediaProjection 抛 SecurityException（表现为直接弹回桌面）
+        Handler(Looper.getMainLooper()).postDelayed({ startCapture(resultCode, data) }, 300)
     }
 
     private fun startCapture(resultCode: Int, data: Intent) {
-        mediaProjection = mediaProjectionManager.getMediaProjection(resultCode, data)
-        mediaProjection?.registerCallback(object : MediaProjection.Callback() {
+        try {
+            val mp = mediaProjectionManager.getMediaProjection(resultCode, data)
+            if (mp == null) {
+                error = true
+                statusText = "无法获取屏幕捕获权限，请重试"
+                return
+            }
+            mediaProjection = mp
+            beginCapture()
+        } catch (e: SecurityException) {
+            // 个别设备上前台服务仍未就绪，再等一次后重试
+            Handler(Looper.getMainLooper()).postDelayed({
+                try {
+                    val mp = mediaProjectionManager.getMediaProjection(resultCode, data)
+                    if (mp == null) {
+                        error = true
+                        statusText = "无法获取屏幕捕获权限，请重试"
+                    } else {
+                        mediaProjection = mp
+                        beginCapture()
+                    }
+                } catch (e2: Exception) {
+                    error = true
+                    statusText = "屏幕捕获失败，请重试"
+                }
+            }, 500)
+        } catch (e: Exception) {
+            error = true
+            statusText = "屏幕捕获失败，请重试"
+        }
+    }
+
+    private fun beginCapture() {
+        val mp = mediaProjection ?: run {
+            error = true
+            statusText = "无法获取屏幕捕获权限，请重试"
+            return
+        }
+        mp.registerCallback(object : MediaProjection.Callback() {
             override fun onStop() {
                 cleanup()
             }
@@ -148,33 +195,44 @@ class ScreenCaptureActivity : ComponentActivity() {
         val height = metrics.heightPixels
         val density = metrics.densityDpi
 
-        imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
-        virtualDisplay = mediaProjection?.createVirtualDisplay(
-            "screen-capture",
-            width,
-            height,
-            density,
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            imageReader?.surface,
-            null,
-            null,
-        )
+        try {
+            imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
+            virtualDisplay = mp.createVirtualDisplay(
+                "screen-capture",
+                width,
+                height,
+                density,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                imageReader?.surface,
+                null,
+                null,
+            )
 
-        imageReader?.setOnImageAvailableListener({ reader ->
-            val image = reader.acquireLatestImage()
-            if (image != null) {
-                try {
-                    bitmap = imageToBitmap(image)
-                    statusText = ""
-                } catch (e: Exception) {
-                    error = true
-                    statusText = "截图失败：${e.message}"
-                } finally {
-                    image.close()
-                    cleanup()
+            imageReader?.setOnImageAvailableListener({ reader ->
+                // 帧已到达，取消超时兜底
+                Handler(Looper.getMainLooper()).removeCallbacks(captureTimeout)
+                val image = reader.acquireLatestImage()
+                if (image != null) {
+                    try {
+                        bitmap = imageToBitmap(image)
+                        statusText = ""
+                    } catch (e: Exception) {
+                        error = true
+                        statusText = "截图失败：${e.message}"
+                    } finally {
+                        image.close()
+                        cleanup()
+                    }
                 }
-            }
-        }, Handler(Looper.getMainLooper()))
+            }, Handler(Looper.getMainLooper()))
+
+            // 兜底：3 秒内拿不到帧则提示重试，避免透明窗口无限「卡住」
+            Handler(Looper.getMainLooper()).postDelayed(captureTimeout, 3000)
+        } catch (e: Exception) {
+            error = true
+            statusText = "屏幕捕获失败：${e.message}"
+            cleanup()
+        }
     }
 
     // ImageReader(RGBA_8888) → Bitmap；处理行 stride 填充
@@ -223,6 +281,7 @@ class ScreenCaptureActivity : ComponentActivity() {
     }
 
     private fun cleanup() {
+        Handler(Looper.getMainLooper()).removeCallbacks(captureTimeout)
         val mp = mediaProjection
         mediaProjection = null
         virtualDisplay?.release()

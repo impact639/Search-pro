@@ -21,7 +21,9 @@ class CommonViewModel @Inject constructor() : ViewModel() {
     companion object {
         // 默认服务器地址与模型名（新增配置时的初始值）
         const val DEFAULT_BASE_URL = "https://api.deepseek.com/chat/completions"
-        const val DEFAULT_MODEL_NAME = "deepseek-reasoner"
+        // 用 deepseek-chat（快速直出答案）而非 deepseek-reasoner（慢速推理模型）。
+        // 本应用已不展示 reasoning_content，reasoner 会先内部生成大段推理再出答案，纯属白等。
+        const val DEFAULT_MODEL_NAME = "deepseek-chat"
 
         // 解释模式（默认）：帮助理解选中的概念/文字
         val PROMPT_EXPLAIN = """
