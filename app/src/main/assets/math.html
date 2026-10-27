@@ -92,8 +92,13 @@
         return '<code>' + item.tex.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</code>';
       }
     });
+    // 仅在用户原本就在底部附近时才自动滚底；若用户已上滑阅读，则保留其位置，
+    // 避免流式更新时被反复拽回底部导致滑动卡顿。
+    var atBottom = (window.innerHeight + window.scrollY) >= (document.body.scrollHeight - 60);
     document.getElementById('content').innerHTML = html;
-    window.scrollTo(0, document.body.scrollHeight);
+    if (atBottom) {
+      window.scrollTo(0, document.body.scrollHeight);
+    }
   }
 </script>
 </body>

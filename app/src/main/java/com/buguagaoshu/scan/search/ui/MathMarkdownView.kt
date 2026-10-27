@@ -11,6 +11,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.coroutines.delay
 import org.json.JSONObject
 
 // 用 WebView + KaTeX 渲染 Markdown 与数学公式（$...$ 行内、$$...$$ 块级）。
@@ -52,6 +53,9 @@ fun MathMarkdownView(
     LaunchedEffect(markdown, dark, pageLoaded) {
         if (!pageLoaded) return@LaunchedEffect
         val wv = webView ?: return@LaunchedEffect
+        // 防抖：流式输出 delta 高频更新时，等 120ms 无新内容再全量渲染，
+        // 避免每个 token 都重跑 markdown-it + KaTeX 造成滑动卡顿。
+        delay(120)
         val js = "render(${JSONObject.quote(markdown)}, $dark)"
         wv.evaluateJavascript(js, null)
     }

@@ -114,7 +114,6 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
     val isListVisible = remember { mutableStateOf(true) }
     val showResultVisible = remember { mutableStateOf(false) }
     val showWebView = remember { mutableStateOf(false) }
-    val reasoningText = remember { mutableStateOf("") }
     val answerText = remember { mutableStateOf("") }
 
     val streamInfo = remember { mutableStateOf(true) }
@@ -339,7 +338,6 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                     showWebView.value = false
                 },
                 history = history,
-                currentReasoning = reasoningText.value,
                 currentAnswer = answerText.value,
             )
 
@@ -428,12 +426,11 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                         isListVisible.value = false
                         showWebView.value = false
                         showResultVisible.value = true
-                        // 归档上一条问答（含思考过程与最终答案）
-                        if (lastQuestion.isNotBlank() && (reasoningText.value.isNotBlank() || answerText.value.isNotBlank())) {
-                            history.add(ChatItem(lastQuestion, reasoningText.value, answerText.value))
+                        // 归档上一条问答（含详细讲解与最终答案）
+                        if (lastQuestion.isNotBlank() && answerText.value.isNotBlank()) {
+                            history.add(ChatItem(lastQuestion, answerText.value))
                         }
                         lastQuestion = questionText
-                        reasoningText.value = ""
                         answerText.value = ""
 
                         val sendData = SendData(
@@ -468,10 +465,7 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                                         val str = jsonConfig.decodeFromString<ChatResponse>(jsonLine)
                                         if (str.choices.isNotEmpty()) {
                                             val delta = str.choices[0].delta
-                                            val reasoning = delta?.reasoning_content
-                                            if (reasoning?.isNotEmpty() == true) {
-                                                reasoningText.value += reasoning
-                                            }
+                                            // reasoning_content 为模型内部推理，不再展示
                                             val content = delta?.content
                                             if (content?.isNotEmpty() == true) {
                                                 answerText.value += content
@@ -498,9 +492,7 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                                     try {
                                         val jsstr = jsonConfig.decodeFromString<ChatResponse>(str)
                                         if (jsstr.choices.isNotEmpty()) {
-                                            jsstr.choices[0].message?.reasoning_content?.let {
-                                                if (it.isNotBlank()) reasoningText.value = it
-                                            }
+                                            // reasoning_content 为模型内部推理，不再展示，仅取 content
                                             jsstr.choices[0].message?.content?.let {
                                                 answerText.value = it
                                             }
@@ -544,7 +536,6 @@ private fun ContentArea(
     fillQuestionText: String,
     onConfirm: () -> Unit,
     history: List<ChatItem>,
-    currentReasoning: String,
     currentAnswer: String,
 ) {
     Box(modifier = modifier) {
@@ -563,7 +554,7 @@ private fun ContentArea(
             visible = showResultVisible,
             modifier = Modifier.fillMaxSize(),
         ) {
-            ResultList(history = history, currentReasoning = currentReasoning, currentAnswer = currentAnswer)
+            ResultList(history = history, currentAnswer = currentAnswer)
         }
         AnimatedVisibility(
             visible = showWebView,
@@ -716,14 +707,13 @@ private fun ScreenTextList(
 @Composable
 private fun ResultList(
     history: List<ChatItem>,
-    currentReasoning: String,
     currentAnswer: String,
 ) {
-    val reasoningLabel = stringResource(TextValue.reasoning_label)
+    val explanationLabel = stringResource(TextValue.explanation_label)
     val answerLabel = stringResource(TextValue.answer_label)
     val dark = isSystemInDarkTheme()
-    val markdown = remember(history, currentReasoning, currentAnswer, reasoningLabel, answerLabel) {
-        buildConversationMarkdown(history, currentReasoning, currentAnswer, reasoningLabel, answerLabel)
+    val markdown = remember(history, currentAnswer, explanationLabel, answerLabel) {
+        buildConversationMarkdown(history, currentAnswer, explanationLabel, answerLabel)
     }
     MathMarkdownView(
         markdown = markdown,
@@ -732,12 +722,11 @@ private fun ResultList(
     )
 }
 
-// 拼装整段会话的 Markdown（问题 + 思考过程 + 最终答案，用 --- 分隔）
+// 拼装整段会话的 Markdown（问题 + 详细讲解 + 最终答案，用 --- 分隔）
 private fun buildConversationMarkdown(
     history: List<ChatItem>,
-    currentReasoning: String,
     currentAnswer: String,
-    reasoningLabel: String,
+    explanationLabel: String,
     answerLabel: String,
 ): String {
     val sb = StringBuilder()
@@ -745,21 +734,39 @@ private fun buildConversationMarkdown(
         if (item.question.isNotBlank()) {
             sb.append("**问题**：").append(item.question).append("\n\n")
         }
-        if (item.reasoning.isNotBlank()) {
-            sb.append("**").append(reasoningLabel).append("**：\n\n").append(item.reasoning).append("\n\n")
-        }
-        if (item.answer.isNotBlank()) {
-            sb.append("**").append(answerLabel).append("**：\n\n").append(item.answer).append("\n\n")
-        }
+        appendAnswerBlocks(sb, item.answer, explanationLabel, answerLabel)
         sb.append("---\n\n")
     }
-    if (currentReasoning.isNotBlank()) {
-        sb.append("**").append(reasoningLabel).append("**：\n\n").append(currentReasoning).append("\n\n")
-    }
-    if (currentAnswer.isNotBlank()) {
-        sb.append("**").append(answerLabel).append("**：\n\n").append(currentAnswer).append("\n\n")
-    }
+    appendAnswerBlocks(sb, currentAnswer, explanationLabel, answerLabel)
     return sb.toString()
+}
+
+// 把一条回答按「【最终答案】」标记拆成 详细讲解 + 最终答案 两块
+private fun appendAnswerBlocks(
+    sb: StringBuilder,
+    answer: String,
+    explanationLabel: String,
+    answerLabel: String,
+) {
+    if (answer.isBlank()) return
+    val (explanation, conclusion) = splitAnswer(answer)
+    if (explanation.isNotBlank()) {
+        sb.append("**").append(explanationLabel).append("**：\n\n").append(explanation).append("\n\n")
+    }
+    if (conclusion.isNotBlank()) {
+        sb.append("**").append(answerLabel).append("**：\n\n").append(conclusion).append("\n\n")
+    }
+}
+
+// 拆分回答：找到「【最终答案】」标记，之前为讲解、之后为结论；无标记时整段作为讲解
+private fun splitAnswer(answer: String): Pair<String, String> {
+    val idx = answer.indexOf(FINAL_ANSWER_MARKER)
+    if (idx < 0) return answer to ""
+    val explanation = answer.substring(0, idx).trim()
+    val conclusion = answer.substring(idx + FINAL_ANSWER_MARKER.length)
+        .trimStart(':', '：', ' ', '-', '\n')
+        .trim()
+    return explanation to conclusion
 }
 
 // 自定义操作按钮组件
@@ -810,4 +817,7 @@ fun ConfigMiniFilterChip(
 }
 
 // 聊天记录条目
-private data class ChatItem(val question: String, val reasoning: String, val answer: String)
+private data class ChatItem(val question: String, val answer: String)
+
+// 最终答案标记：模型在回答末尾用它区分「详细讲解」与「最终答案」
+private const val FINAL_ANSWER_MARKER = "【最终答案】"
