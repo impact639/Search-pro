@@ -59,6 +59,8 @@ object FxComposeControl {
     fun cancel() {
         // 关闭无障碍服务
         StaticVariableConfig.openScan = false
+        // 取消进行中的模型请求
+        HttpControl.cancel()
         FloatingX.controlOrNull(_TAG)?.cancel()
         FloatingX.controlOrNull(_minimize_tag)?.cancel()
     }

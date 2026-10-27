@@ -2,6 +2,7 @@ package com.buguagaoshu.scan.search.ui
 
 import android.annotation.SuppressLint
 import android.app.Application
+import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -115,6 +116,8 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
     val showResultVisible = remember { mutableStateOf(false) }
     val showWebView = remember { mutableStateOf(false) }
     val answerText = remember { mutableStateOf("") }
+    // 请求进行中（首字到达前显示加载提示）
+    var loading by remember { mutableStateOf(false) }
 
     val streamInfo = remember { mutableStateOf(true) }
     val moreExpanded = remember { mutableStateOf(false) }
@@ -339,6 +342,7 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                 },
                 history = history,
                 currentAnswer = answerText.value,
+                loading = loading,
             )
 
             HorizontalDivider(
@@ -422,6 +426,11 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                             return@submit
                         }
 
+                        // 取消上一次尚未结束的请求，避免串流/重复回答
+                        HttpControl.cancel()
+                        val t0 = System.currentTimeMillis()
+                        loading = true
+
                         // 新增隐藏列表逻辑
                         isListVisible.value = false
                         showWebView.value = false
@@ -446,49 +455,53 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                             isLenient = true
                             coerceInputValues = true
                         }
+                        Log.d("ScanSearchTime", "[本地请求准备完成] ${System.currentTimeMillis() - t0}ms")
+                        // 首个有效回答文字是否已到达（用于记录「首字耗时」）
+                        var firstContent = true
 
                         if (streamInfo.value) {
                             HttpControl.sendStream(
                                 sendData,
                                 config.api,
                                 config.apiKey,
-                                onChunkReceived = { chunk ->
-                                    val jsonLine = if (chunk.startsWith("data: ")) {
-                                        chunk.substring("data: ".length)
-                                    } else {
-                                        chunk
-                                    }
-                                    if (chunk == ": keep-alive") {
-                                        return@sendStream
-                                    }
+                                onChunkReceived = { payload ->
+                                    // payload 已是去掉 data: 前缀的 JSON，直接解析
                                     try {
-                                        val str = jsonConfig.decodeFromString<ChatResponse>(jsonLine)
+                                        val str = jsonConfig.decodeFromString<ChatResponse>(payload)
                                         if (str.choices.isNotEmpty()) {
                                             val delta = str.choices[0].delta
                                             // reasoning_content 为模型内部推理，不再展示
                                             val content = delta?.content
-                                            if (content?.isNotEmpty() == true) {
+                                            if (!content.isNullOrEmpty()) {
+                                                if (firstContent) {
+                                                    firstContent = false
+                                                    loading = false
+                                                    Log.d("ScanSearchTime", "[首个有效文字] ${System.currentTimeMillis() - t0}ms")
+                                                }
                                                 answerText.value += content
                                             }
                                         }
                                     } catch (e: Exception) {
-                                        // 忽略无法解析的行（如 [DONE]）
+                                        // 忽略无法解析的块
                                     }
                                 },
                                 onComplete = {
-                                    // 流式结束
+                                    loading = false
+                                    Log.d("ScanSearchTime", "[完整回答结束] ${System.currentTimeMillis() - t0}ms")
                                 },
                                 onError = { error ->
+                                    loading = false
                                     answerText.value = "$requestFailedText$error"
                                 },
                             )
                         } else {
-                            answerText.value = "当前使用非流式输出，等待时间可能较长，请耐心等待！\n"
                             HttpControl.send(
                                 sendData,
                                 config.api,
                                 config.apiKey,
                                 onSuccess = { str ->
+                                    loading = false
+                                    Log.d("ScanSearchTime", "[完整回答结束] ${System.currentTimeMillis() - t0}ms")
                                     try {
                                         val jsstr = jsonConfig.decodeFromString<ChatResponse>(str)
                                         if (jsstr.choices.isNotEmpty()) {
@@ -502,6 +515,7 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                                     }
                                 },
                                 onError = { str ->
+                                    loading = false
                                     answerText.value = "$requestFailedText$str"
                                 },
                             )
@@ -537,6 +551,7 @@ private fun ContentArea(
     onConfirm: () -> Unit,
     history: List<ChatItem>,
     currentAnswer: String,
+    loading: Boolean,
 ) {
     Box(modifier = modifier) {
         AnimatedVisibility(
@@ -554,7 +569,7 @@ private fun ContentArea(
             visible = showResultVisible,
             modifier = Modifier.fillMaxSize(),
         ) {
-            ResultList(history = history, currentAnswer = currentAnswer)
+            ResultList(history = history, currentAnswer = currentAnswer, loading = loading)
         }
         AnimatedVisibility(
             visible = showWebView,
@@ -708,18 +723,30 @@ private fun ScreenTextList(
 private fun ResultList(
     history: List<ChatItem>,
     currentAnswer: String,
+    loading: Boolean,
 ) {
     val explanationLabel = stringResource(TextValue.explanation_label)
     val answerLabel = stringResource(TextValue.answer_label)
+    val generatingText = stringResource(TextValue.generating)
     val dark = isSystemInDarkTheme()
     val markdown = remember(history, currentAnswer, explanationLabel, answerLabel) {
         buildConversationMarkdown(history, currentAnswer, explanationLabel, answerLabel)
     }
-    MathMarkdownView(
-        markdown = markdown,
-        dark = dark,
-        modifier = Modifier.fillMaxSize(),
-    )
+    Column(modifier = Modifier.fillMaxSize()) {
+        if (loading && currentAnswer.isBlank()) {
+            Text(
+                text = generatingText,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = Dimens.SpaceSm, vertical = Dimens.SpaceXs),
+            )
+        }
+        MathMarkdownView(
+            markdown = markdown,
+            dark = dark,
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+        )
+    }
 }
 
 // 拼装整段会话的 Markdown（问题 + 详细讲解 + 最终答案，用 --- 分隔）

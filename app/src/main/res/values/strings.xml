@@ -53,6 +53,7 @@
     <string name="reasoning_label">思考过程</string>
     <string name="explanation_label">详细讲解</string>
     <string name="answer_label">最终答案</string>
+    <string name="generating">正在生成回答…</string>
     <string name="size">尺寸</string>
     <string name="size_small">小</string>
     <string name="size_medium">中</string>
