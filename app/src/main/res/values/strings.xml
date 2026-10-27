@@ -47,6 +47,7 @@
     <string name="please_complete_fields">请填写名称、服务器地址和 API Key</string>
     <string name="invalid_url">请输入有效的服务器地址</string>
     <string name="read_screen">读屏</string>
+    <string name="capture_screen">识屏</string>
     <string name="web">网页</string>
     <string name="fill_question">填入问题</string>
     <string name="more">更多</string>

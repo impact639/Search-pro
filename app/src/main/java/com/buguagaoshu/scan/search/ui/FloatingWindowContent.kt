@@ -2,6 +2,7 @@ package com.buguagaoshu.scan.search.ui
 
 import android.annotation.SuppressLint
 import android.app.Application
+import android.content.Intent
 import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
@@ -71,6 +72,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.buguagaoshu.scan.search.ScreenCaptureActivity
 import com.buguagaoshu.scan.search.config.StaticVariableConfig
 import com.buguagaoshu.scan.search.control.FxComposeControl
 import com.buguagaoshu.scan.search.control.HttpControl
@@ -101,6 +103,7 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
     val solveText = stringResource(TextValue.solve)
     val noConfigTips = stringResource(TextValue.no_config_tips)
     val readScreenText = stringResource(TextValue.read_screen)
+    val captureScreenText = stringResource(TextValue.capture_screen)
     val webText = stringResource(TextValue.web)
     val fillQuestionText = stringResource(TextValue.fill_question)
     val moreText = stringResource(TextValue.more)
@@ -146,7 +149,12 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
     val selectedText by StaticVariableConfig.selectedTextFlow.collectAsState()
     LaunchedEffect(selectedText) {
         if (selectedText.isNotBlank()) {
-            commonViewModel.updateQuestionText(selectedText)
+            // 与分享一致：已有未提交内容时追加，不静默覆盖
+            val current = commonViewModel.questionText.value
+            commonViewModel.updateQuestionText(
+                if (current.isBlank()) selectedText
+                else current.trimEnd() + "\n" + selectedText
+            )
         }
     }
 
@@ -410,6 +418,19 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                         isListVisible.value = true
                         showWebView.value = false
                         showResultVisible.value = false
+                    },
+                    modifier = Modifier.weight(1f).height(Dimens.CompactControlHeight),
+                )
+
+                ActionButton(
+                    text = captureScreenText,
+                    onClick = {
+                        moreExpanded.value = false
+                        // 先收起浮窗避免被截进图里，再进入框选界面
+                        FxComposeControl.hideSearch(application)
+                        val intent = Intent(context, ScreenCaptureActivity::class.java)
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(intent)
                     },
                     modifier = Modifier.weight(1f).height(Dimens.CompactControlHeight),
                 )

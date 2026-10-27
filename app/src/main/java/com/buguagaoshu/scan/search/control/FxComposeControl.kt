@@ -56,6 +56,12 @@ object FxComposeControl {
         FloatingX.controlOrNull(_minimize_tag)?.hide()
     }
 
+    // 仅显示已安装的主浮窗并隐藏小气泡（OCR 回填后使用，无需 CommonViewModel）
+    fun showSearchWindow() {
+        FloatingX.controlOrNull(_TAG)?.show()
+        FloatingX.controlOrNull(_minimize_tag)?.hide()
+    }
+
     fun cancel() {
         // 关闭无障碍服务
         StaticVariableConfig.openScan = false
