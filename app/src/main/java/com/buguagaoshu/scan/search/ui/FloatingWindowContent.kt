@@ -427,6 +427,7 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                     text = captureScreenText,
                     onClick = {
                         moreExpanded.value = false
+                        Log.d("ScanSearchCapture", "[阶段0-用户点击识屏] 收起浮窗并启动前台服务")
                         // 先收起浮窗避免被截进图里
                         FxComposeControl.hideSearch(application)
                         // 后台悬浮窗直接 startActivity 会被 Android 10+ 静默拦截（点了没反应），
@@ -437,6 +438,7 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                         try {
                             context.startForegroundService(serviceIntent)
                         } catch (e: Exception) {
+                            Log.e("ScanSearchCapture", "[阶段0-startForegroundService失败] 走兜底直接 startActivity：${e.javaClass.name}：${e.message}", e)
                             // 兜底：个别系统禁止后台启动前台服务时，直接尝试启动识屏 Activity
                             val intent = Intent(context, ScreenCaptureActivity::class.java)
                             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
