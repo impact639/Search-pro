@@ -62,6 +62,25 @@
 <script>
   var md = window.markdownit({ html: false, breaks: true, linkify: true });
   var katexMath = [];
+  var fencedBlocks = [];
+
+  // 先整体保护代码块 ```...```，避免其中的 $（shell/正则/货币）被误判为数学公式，
+  // 也避免行内代码正则错误地扫描到代码块围栏。
+  function protectFenced(text) {
+    fencedBlocks = [];
+    return text.replace(/```[\s\S]+?```/g, function (block) {
+      var id = fencedBlocks.length;
+      fencedBlocks.push(block);
+      return '@@FENCED' + id + '@@';
+    });
+  }
+
+  // 保护行内代码 `...` 中的 $，避免被误判为数学公式
+  function maskInlineDollar(text) {
+    return text.replace(/`([^`\n]+?)`/g, function (_, code) {
+      return '`' + code.replace(/\$/g, '@@DOLLAR@@') + '`';
+    });
+  }
 
   // 先把 $...$（行内）与 $$...$$（块级）摘出来保护，避免 markdown-it 把公式里的下划线/星号当标记
   function protectMath(text) {
@@ -81,8 +100,11 @@
 
   function render(text, dark) {
     document.body.className = dark ? 'dark' : '';
-    var protectedText = protectMath(text || '');
-    var html = md.render(protectedText);
+    var t = protectFenced(text || '');
+    t = maskInlineDollar(t);
+    t = protectMath(t);
+    var html = md.render(t);
+    // 恢复数学公式
     html = html.replace(/@@KTXMATH(\d+)@@/g, function (_, i) {
       var item = katexMath[parseInt(i, 10)];
       if (!item) return '';
@@ -92,6 +114,14 @@
         return '<code>' + item.tex.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</code>';
       }
     });
+    // 恢复行内代码中的 $
+    html = html.replace(/@@DOLLAR@@/g, '$');
+    // 恢复代码块（重新交给 markdown-it 渲染成 <pre><code>）
+    html = html.replace(/@@FENCED(\d+)@@/g, function (_, i) {
+      return md.render(fencedBlocks[parseInt(i, 10)] || '');
+    });
+    // 占位符被 markdown-it 包成 <p>，替换成 <pre> 后可能残留空段落，清理掉
+    html = html.replace(/<p><\/p>/g, '');
     // 仅在用户原本就在底部附近时才自动滚底；若用户已上滑阅读，则保留其位置，
     // 避免流式更新时被反复拽回底部导致滑动卡顿。
     var atBottom = (window.innerHeight + window.scrollY) >= (document.body.scrollHeight - 60);

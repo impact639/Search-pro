@@ -7,7 +7,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.buguagaoshu.scan.search.config.StaticVariableConfig
 import com.buguagaoshu.scan.search.data.ConfigData
-import com.buguagaoshu.scan.search.data.ScanSearchData
 import com.buguagaoshu.scan.search.utils.PreferencesDataStoreUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow

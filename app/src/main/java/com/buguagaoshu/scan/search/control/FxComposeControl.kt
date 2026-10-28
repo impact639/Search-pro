@@ -63,8 +63,6 @@ object FxComposeControl {
     }
 
     fun cancel() {
-        // 关闭无障碍服务
-        StaticVariableConfig.openScan = false
         // 取消进行中的模型请求
         HttpControl.cancel()
         FloatingX.controlOrNull(_TAG)?.cancel()
@@ -73,9 +71,6 @@ object FxComposeControl {
 
     fun installMinimize(context: Application) {
         if (!FloatingX.isInstalled(_minimize_tag)) {
-            // 开启无障碍服务，读取数据
-            StaticVariableConfig.openScan = true
-
             FloatingX.install {
                 setContext(context)
                 setTag(_minimize_tag)
@@ -120,9 +115,6 @@ object FxComposeControl {
 
     fun install(context: Application, commonViewModel: CommonViewModel) {
         if (!FloatingX.isInstalled(_TAG)) {
-            // 开启无障碍服务，读取数据
-            StaticVariableConfig.openScan = true
-
             FloatingX.install {
                 setContext(context)
                 setTag(_TAG)

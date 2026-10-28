@@ -2,7 +2,6 @@ package com.buguagaoshu.scan.search
 
 import android.content.Intent
 import android.os.Bundle
-import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -42,14 +41,8 @@ class MainActivity : ComponentActivity() {
             initData(commonViewModel)
         }
 
-        // 检查无障碍服务是否已开启
-        if (!isAccessibilityServiceEnabled()) {
-            // 引导用户开启无障碍服务
-            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-            startActivity(intent)
-        }
-
-        // 处理第三方分享的文字（ACTION_SEND / text/plain）
+        // 处理第三方分享的文字（ACTION_SEND / text/plain）。
+        // 不再每次启动强制跳转无障碍设置页，避免打断分享流程（分享文字「消失」的直接原因）。
         handleShareIntent(intent)
     }
 
@@ -68,17 +61,6 @@ class MainActivity : ComponentActivity() {
         StaticVariableConfig.postSharedText(text)
         // 打开主浮窗（已安装则显示），让用户看到填入的问题
         FxComposeControl.openSearchWindow(application, commonViewModel)
-    }
-
-    // 检查无障碍权限
-    private fun isAccessibilityServiceEnabled(): Boolean {
-        val settingValue = Settings.Secure.getString(
-            contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-        )
-        val packageName = packageName
-        val serviceName = "$packageName.service.ScreenReaderService"
-        return settingValue?.contains(serviceName) == true
     }
 
     private fun initData(commonViewModel: CommonViewModel) {

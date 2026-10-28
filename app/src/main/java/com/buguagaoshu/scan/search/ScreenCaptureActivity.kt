@@ -42,6 +42,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
@@ -56,7 +58,6 @@ import com.buguagaoshu.scan.search.ui.theme.SearchTheme
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
-import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -459,19 +460,34 @@ private fun ScreenCaptureScreen(
                 if (start != null && end != null) {
                     val left = min(start!!.x, end!!.x)
                     val top = min(start!!.y, end!!.y)
-                    val size = Size(abs(end!!.x - start!!.x), abs(end!!.y - start!!.y))
-                    // 半透明遮罩 + 白色边框，便于看清选中范围
-                    drawRect(
-                        color = Color.White.copy(alpha = 0.15f),
-                        topLeft = Offset(left, top),
-                        size = size,
-                    )
-                    drawRect(
-                        color = Color.White,
-                        topLeft = Offset(left, top),
-                        size = size,
-                        style = Stroke(width = 2.dp.toPx()),
-                    )
+                    val right = max(start!!.x, end!!.x)
+                    val bottom = max(start!!.y, end!!.y)
+                    val w = right - left
+                    val h = bottom - top
+                    if (w > 0f && h > 0f) {
+                        val cw = size.width.toFloat()
+                        val ch = size.height.toFloat()
+                        // 选区外半透明变暗（EvenOdd 镂空选区），一眼看清选区边界
+                        val dimPath = Path().apply {
+                            addRect(androidx.compose.ui.geometry.Rect(0f, 0f, cw, ch))
+                            addRect(androidx.compose.ui.geometry.Rect(left, top, right, bottom))
+                            fillType = PathFillType.EvenOdd
+                        }
+                        drawPath(dimPath, color = Color.Black.copy(alpha = 0.55f))
+                        // 双色边框：白色粗边（深色/彩色背景上醒目）+ 亮红细边（白色背景上醒目）
+                        drawRect(
+                            color = Color.White,
+                            topLeft = Offset(left, top),
+                            size = Size(w, h),
+                            style = Stroke(width = 4.dp.toPx()),
+                        )
+                        drawRect(
+                            color = Color(0xFFFF3B30),
+                            topLeft = Offset(left, top),
+                            size = Size(w, h),
+                            style = Stroke(width = 2.dp.toPx()),
+                        )
+                    }
                 }
             }
         }

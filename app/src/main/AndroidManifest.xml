@@ -7,6 +7,7 @@
     <uses-permission android:name="android.permission.SYSTEM_OVERLAY_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
@@ -42,17 +43,26 @@
             </intent-filter>
         </activity>
 
-        <!-- 屏幕框选 OCR：捕获屏幕的裁剪界面 -->
+        <!-- 屏幕框选 OCR：捕获屏幕的裁剪界面。
+             taskAffinity 独立，避免被塞进主任务栈导致透明窗口背后透出首页而非第三方 App；
+             excludeFromRecents 避免出现在最近任务。 -->
         <activity
             android:name=".ScreenCaptureActivity"
             android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity="com.buguagaoshu.scan.search.capture"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
-        <!-- 屏幕捕获前台服务（Android 14 起 MediaProjection 要求） -->
+        <!-- 屏幕捕获前台服务。
+             拉起重试用 specialUse（授权前即可起 FGS），拿到授权后再用 mediaProjection。 -->
         <service
             android:name=".service.ScreenCaptureService"
             android:exported="false"
-            android:foregroundServiceType="mediaProjection" />
+            android:foregroundServiceType="mediaProjection|specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="screen_capture_launcher" />
+        </service>
 
         <!-- 注册无障碍服务 -->
         <service android:name=".service.ScreenReaderService"

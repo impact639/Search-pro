@@ -23,8 +23,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -37,8 +35,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -46,7 +42,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,7 +50,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -78,7 +72,6 @@ import com.buguagaoshu.scan.search.control.FxComposeControl
 import com.buguagaoshu.scan.search.control.HttpControl
 import com.buguagaoshu.scan.search.data.ChatResponse
 import com.buguagaoshu.scan.search.data.ConfigData
-import com.buguagaoshu.scan.search.data.ScanSearchData
 import com.buguagaoshu.scan.search.data.SendData
 import com.buguagaoshu.scan.search.data.SendMessage
 import com.buguagaoshu.scan.search.service.ScreenCaptureService
@@ -103,20 +96,14 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
     val explainText = stringResource(TextValue.explain)
     val solveText = stringResource(TextValue.solve)
     val noConfigTips = stringResource(TextValue.no_config_tips)
-    val readScreenText = stringResource(TextValue.read_screen)
     val captureScreenText = stringResource(TextValue.capture_screen)
     val webText = stringResource(TextValue.web)
-    val fillQuestionText = stringResource(TextValue.fill_question)
     val moreText = stringResource(TextValue.more)
     val sizeText = stringResource(TextValue.size)
     val sizeSmallText = stringResource(TextValue.size_small)
     val sizeMediumText = stringResource(TextValue.size_medium)
     val sizeLargeText = stringResource(TextValue.size_large)
 
-    val textList = remember { mutableStateListOf<ScanSearchData>() }
-    val textMap = remember { mutableStateMapOf<String, ScanSearchData>() }
-
-    val isListVisible = remember { mutableStateOf(true) }
     val showResultVisible = remember { mutableStateOf(false) }
     val showWebView = remember { mutableStateOf(false) }
     val answerText = remember { mutableStateOf("") }
@@ -143,7 +130,6 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
     val view = LocalView.current
     val context = LocalContext.current
     val application = context.applicationContext as Application
-    val alphabet = listOf("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K")
     val configMap = commonViewModel.apiMap
 
     // 划词：监听无障碍捕获的选中文字，自动填入问题框
@@ -309,7 +295,6 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                     ActionButton(
                         text = webText,
                         onClick = {
-                            isListVisible.value = false
                             showResultVisible.value = false
                             showWebView.value = true
                             moreExpanded.value = false
@@ -326,29 +311,13 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                 color = MaterialTheme.colorScheme.outlineVariant,
             )
 
-            // 内容区：读屏列表 / 回答结果 / 网页，占满剩余空间
+            // 内容区：回答结果 / 网页，占满剩余空间
             ContentArea(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                isListVisible = isListVisible.value,
                 showResultVisible = showResultVisible.value,
                 showWebView = showWebView.value,
-                textList = textList,
-                textMap = textMap,
-                fillQuestionText = fillQuestionText,
-                onConfirm = {
-                    val stringQuestion = StringBuilder()
-                    for (item: ScanSearchData in textList) {
-                        if (textMap[item.id]?.cheek == true) {
-                            stringQuestion.append("${item.text}\n")
-                        }
-                    }
-                    commonViewModel.updateQuestionText(stringQuestion.toString())
-                    isListVisible.value = false
-                    showResultVisible.value = false
-                    showWebView.value = false
-                },
                 history = history,
                 currentAnswer = answerText.value,
                 loading = loading,
@@ -386,44 +355,6 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 ActionButton(
-                    text = readScreenText,
-                    onClick = {
-                        // 清除历史数据
-                        textList.clear()
-                        textMap.clear()
-
-                        var i = 0
-                        while (i < StaticVariableConfig.screenTextList.size) {
-                            if (alphabet.contains(StaticVariableConfig.screenTextList[i].text)) {
-                                if (i + 1 >= StaticVariableConfig.screenTextList.size) {
-                                    textList.add(StaticVariableConfig.screenTextList[i])
-                                } else {
-                                    // 处理只有的情况 ABCD
-                                    textList.add(
-                                        ScanSearchData(
-                                            StaticVariableConfig.screenTextList[i].id,
-                                            "${StaticVariableConfig.screenTextList[i].text}.${StaticVariableConfig.screenTextList[i + 1].text}",
-                                        ),
-                                    )
-                                    i++
-                                }
-                            } else {
-                                textList.add(StaticVariableConfig.screenTextList[i])
-                            }
-                            i++
-                        }
-
-                        textList.forEach { key ->
-                            textMap[key.id] = key
-                        }
-                        isListVisible.value = true
-                        showWebView.value = false
-                        showResultVisible.value = false
-                    },
-                    modifier = Modifier.weight(1f).height(Dimens.CompactControlHeight),
-                )
-
-                ActionButton(
                     text = captureScreenText,
                     onClick = {
                         moreExpanded.value = false
@@ -431,7 +362,7 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                         // 先收起浮窗避免被截进图里
                         FxComposeControl.hideSearch(application)
                         // 后台悬浮窗直接 startActivity 会被 Android 10+ 静默拦截（点了没反应），
-                        // 改由 mediaProjection 前台服务豁免限制后拉起识屏界面
+                        // 改由前台服务豁免限制后拉起识屏界面（服务在拉起阶段用 specialUse 类型，拿到授权后再升级 mediaProjection）
                         val serviceIntent = Intent(context, ScreenCaptureService::class.java).apply {
                             action = ScreenCaptureService.ACTION_LAUNCH
                         }
@@ -465,8 +396,6 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                         val t0 = System.currentTimeMillis()
                         loading = true
 
-                        // 新增隐藏列表逻辑
-                        isListVisible.value = false
                         showWebView.value = false
                         showResultVisible.value = true
                         // 归档上一条问答（含详细讲解与最终答案）
@@ -492,6 +421,8 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                         Log.d("ScanSearchTime", "[本地请求准备完成] ${System.currentTimeMillis() - t0}ms")
                         // 首个有效回答文字是否已到达（用于记录「首字耗时」）
                         var firstContent = true
+                        // 统计解析失败的 SSE 块，用于排查乱码（判断是数据层还是展示层问题）
+                        var parseFailCount = 0
 
                         if (streamInfo.value) {
                             HttpControl.sendStream(
@@ -516,12 +447,19 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                                             }
                                         }
                                     } catch (e: Exception) {
-                                        // 忽略无法解析的块
+                                        // 诊断：解析失败的块往往就是乱码来源（如字段类型不匹配），
+                                        // 只记录失败块的载荷前缀与异常类型，不含 API Key。
+                                        parseFailCount++
+                                        Log.w(
+                                            "ScanSearchParse",
+                                            "[解析失败块#$parseFailCount] ${e.javaClass.simpleName}：${e.message} payload前120字=${payload.take(120)}"
+                                        )
                                     }
                                 },
                                 onComplete = {
                                     loading = false
                                     Log.d("ScanSearchTime", "[完整回答结束] ${System.currentTimeMillis() - t0}ms")
+                                    Log.d("ScanSearchParse", "[回答汇总] 累计长度=${answerText.value.length} 解析失败块数=$parseFailCount")
                                 },
                                 onError = { error ->
                                     loading = false
@@ -570,35 +508,19 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
     }
 }
 
-// 内容区：读屏列表 / 回答结果 / 网页 三态切换。
+// 内容区：回答结果 / 网页 两态切换。
 // 独立成 composable（而非内联在 Column 里），避免 AnimatedVisibility 被解析成
 // ColumnScope 扩展导致「cannot be called in this context with an implicit receiver」。
 @Composable
 private fun ContentArea(
     modifier: Modifier,
-    isListVisible: Boolean,
     showResultVisible: Boolean,
     showWebView: Boolean,
-    textList: List<ScanSearchData>,
-    textMap: MutableMap<String, ScanSearchData>,
-    fillQuestionText: String,
-    onConfirm: () -> Unit,
     history: List<ChatItem>,
     currentAnswer: String,
     loading: Boolean,
 ) {
     Box(modifier = modifier) {
-        AnimatedVisibility(
-            visible = isListVisible,
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            ScreenTextList(
-                textList = textList,
-                textMap = textMap,
-                fillQuestionText = fillQuestionText,
-                onConfirm = onConfirm,
-            )
-        }
         AnimatedVisibility(
             visible = showResultVisible,
             modifier = Modifier.fillMaxSize(),
@@ -688,66 +610,6 @@ private fun FloatingTopBar(
                     tint = MaterialTheme.colorScheme.error,
                 )
             }
-        }
-    }
-}
-
-// 读屏结果列表：勾选后填入问题
-@Composable
-private fun ScreenTextList(
-    textList: List<ScanSearchData>,
-    textMap: MutableMap<String, ScanSearchData>,
-    fillQuestionText: String,
-    onConfirm: () -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(Dimens.SpaceXs),
-        ) {
-            items(textList) { item ->
-                Surface(
-                    shape = RoundedCornerShape(Dimens.RadiusSm),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = Dimens.SpaceXs),
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(Dimens.SpaceSm),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = item.text,
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(end = Dimens.SpaceSm),
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                        Checkbox(
-                            checked = textMap[item.id]?.cheek ?: false,
-                            onCheckedChange = {
-                                textMap[item.id] = item.copy(cheek = it)
-                            },
-                            colors = CheckboxDefaults.colors(
-                                checkedColor = MaterialTheme.colorScheme.primary,
-                            ),
-                        )
-                    }
-                }
-            }
-        }
-        Button(
-            onClick = onConfirm,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(Dimens.SpaceSm),
-        ) {
-            Text(fillQuestionText)
         }
     }
 }

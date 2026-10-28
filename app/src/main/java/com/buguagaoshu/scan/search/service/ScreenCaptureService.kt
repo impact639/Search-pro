@@ -34,18 +34,33 @@ class ScreenCaptureService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d(TAG, "[前台服务onStartCommand] action=${intent?.action} SDK=${Build.VERSION.SDK_INT}")
-        startForegroundWithType()
-        if (intent?.action == ACTION_LAUNCH) {
+        val isLaunch = intent?.action == ACTION_LAUNCH
+        Log.d(TAG, "[前台服务onStartCommand] action=${intent?.action} isLaunch=$isLaunch SDK=${Build.VERSION.SDK_INT}")
+        startForegroundWithType(isLaunch)
+        if (isLaunch) {
             val activityIntent = Intent(this, ScreenCaptureActivity::class.java)
             activityIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             Log.d(TAG, "[前台服务拉起识屏Activity]")
-            startActivity(activityIntent)
+            try {
+                startActivity(activityIntent)
+                Log.d(TAG, "[拉起识屏Activity成功]")
+            } catch (e: Exception) {
+                Log.e(TAG, "[拉起识屏Activity失败] ${e.javaClass.name}：${e.message}", e)
+            }
         }
         return START_NOT_STICKY
     }
 
-    private fun startForegroundWithType() {
+    /**
+     * 关键修复：Android 14+（API 34）起，mediaProjection 类型的前台服务必须等用户完成
+     * MediaProjection 授权后才能启动（依赖 project_media app-op），在此之前调用
+     * startForeground(MEDIA_PROJECTION) 会抛 SecurityException，导致服务不是前台，随后的
+     * startActivity 被「后台启动 Activity」限制静默拦截——表现为点了没反应。
+     *
+     * 因此：拉起识屏 Activity 用 specialUse 类型（无需授权即可起 FGS），拿到授权后
+     * 再升级为 mediaProjection 类型。
+     */
+    private fun startForegroundWithType(isLaunch: Boolean) {
         val channelId = "screen_capture"
         val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -61,9 +76,14 @@ class ScreenCaptureService : Service() {
             .build()
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                // API 34+：必须显式指定 mediaProjection 类型
-                startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
-                Log.d(TAG, "[startForeground成功] 类型=mediaProjection (Android 14+)")
+                // 拉起阶段用 specialUse（授权前可起），捕获阶段用 mediaProjection（授权后）
+                val type = if (isLaunch) {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                } else {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+                }
+                startForeground(1, notification, type)
+                Log.d(TAG, "[startForeground成功] 类型=${if (isLaunch) "specialUse" else "mediaProjection"} (Android 14+)")
             } else {
                 startForeground(1, notification)
                 Log.d(TAG, "[startForeground成功] 无类型 (Android <14)")

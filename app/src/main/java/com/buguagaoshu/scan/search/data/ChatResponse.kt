@@ -34,27 +34,20 @@ data class Choice(
     val finish_reason: String? = null,
     val index: Int?,
     val message: Message? = null,
-    val logprobs: String? = null,
     val delta: DeltaInfo? = null
 )
 
-//    "content": "叫通义千",
-//    "function_call": null,
-//    "refusal": null,
-//    "role": null,
-//    "tool_calls": null@OptIn(ExperimentalSerializationApi::class)
-//@JsonIgnoreUnknownKeys
-@Serializable
+// 注意：function_call / refusal / tool_calls / logprobs 等字段在不同服务商里可能是
+// null、对象或数组，若声明为 String? 会因类型不匹配抛异常导致整块被丢弃。
+// 已通过 @JsonIgnoreUnknownKeys 直接忽略这些未使用的字段，只保留真正需要的 content / reasoning_content。
 @OptIn(ExperimentalSerializationApi::class)
 @JsonIgnoreUnknownKeys
+@Serializable
 data class DeltaInfo(
-    // 思维链信息
+    // 思维链信息（不再展示，仅保留解析）
     val reasoning_content : String? = null,
     val content : String = "",
-    val function_call: String? = null,
-    val refusal: String? = null,
-    val role: String? = null,
-    val tool_calls: String? = null
+    val role: String? = null
 )
 
 @Serializable
