@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.buguagaoshu.scan.search.config.StaticVariableConfig
@@ -58,6 +59,7 @@ import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 /**
  * 屏幕框选 + OCR。
@@ -81,10 +83,17 @@ class ScreenCaptureActivity : ComponentActivity() {
     private val tag = "ScanSearchCapture"
     private var t0 = 0L
 
+    // 资源是否已清理。图像回调与清理函数都投递在 main Handler 上，靠这个标志保证
+    // 清理后仍排队中的图像回调不会在已 close 的 ImageReader 上继续操作（避免崩溃）。
+    private var cleanedUp = false
+
+    // 延迟启动捕获的 Runnable，存成字段便于 onDestroy 时取消，避免销毁后仍持有 Activity
+    private var startCaptureRunnable: Runnable? = null
+
     // 截图超时兜底：授权成功但长时间拿不到帧（系统未生成画面 / 投影失败）时，
     // 显示错误页而非一直停留在透明窗口（用户看到的「卡住」）。
     private val captureTimeout = Runnable {
-        if (bitmap == null && !error) {
+        if (bitmap == null && !error && !cleanedUp) {
             Log.w(tag, "[超时] 3 秒未收到图像回调，判定为「VirtualDisplay 未出帧」")
             error = true
             statusText = "截图超时，请重试"
@@ -159,7 +168,8 @@ class ScreenCaptureActivity : ComponentActivity() {
 
         // 延迟到下一轮主线程，并给前台服务足够时间完成 startForeground，
         // 避免 getMediaProjection 抛 SecurityException（表现为直接弹回桌面）
-        Handler(Looper.getMainLooper()).postDelayed({ startCapture(resultCode, data) }, 300)
+        startCaptureRunnable = Runnable { startCapture(resultCode, data) }
+        Handler(Looper.getMainLooper()).postDelayed(startCaptureRunnable!!, 300)
     }
 
     private fun startCapture(resultCode: Int, data: Intent) {
@@ -170,36 +180,25 @@ class ScreenCaptureActivity : ComponentActivity() {
                 Log.w(tag, "[阶段5-获取MediaProjection失败] 返回 null")
                 error = true
                 statusText = "无法获取屏幕捕获权限，请重试"
+                cleanup()
                 return
             }
             mediaProjection = mp
             Log.d(tag, "[阶段5-获取MediaProjection成功] 耗时=${System.currentTimeMillis() - t0}ms")
             beginCapture()
         } catch (e: SecurityException) {
-            Log.e(tag, "[阶段5-SecurityException] 前台服务可能未就绪，500ms 后重试：${e.message}", e)
-            // 个别设备上前台服务仍未就绪，再等一次后重试
-            Handler(Looper.getMainLooper()).postDelayed({
-                try {
-                    val mp = mediaProjectionManager.getMediaProjection(resultCode, data)
-                    if (mp == null) {
-                        Log.w(tag, "[阶段5-重试失败] getMediaProjection 返回 null")
-                        error = true
-                        statusText = "无法获取屏幕捕获权限，请重试"
-                    } else {
-                        mediaProjection = mp
-                        Log.d(tag, "[阶段5-重试成功] getMediaProjection 成功")
-                        beginCapture()
-                    }
-                } catch (e2: Exception) {
-                    Log.e(tag, "[阶段5-重试失败] ${e2.javaClass.name}：${e2.message}", e2)
-                    error = true
-                    statusText = "屏幕捕获失败，请重试"
-                }
-            }, 500)
+            // 前台服务未就绪等系统原因。注意：Android 14 的授权 resultData 是一次性的，
+            // 不能拿同一个 data 再次 getMediaProjection（第二次会抛 IllegalStateException），
+            // 因此这里不再「延迟重试」，直接提示用户重试——重试会重新走授权流程拿到新 token。
+            Log.e(tag, "[阶段5-SecurityException] ${e.message}（不复用 resultData 重试）", e)
+            error = true
+            statusText = "屏幕捕获权限异常，请重试"
+            cleanup()
         } catch (e: Exception) {
             Log.e(tag, "[阶段5-获取MediaProjection失败] ${e.javaClass.name}：${e.message}", e)
             error = true
             statusText = "屏幕捕获失败，请重试"
+            cleanup()
         }
     }
 
@@ -209,6 +208,7 @@ class ScreenCaptureActivity : ComponentActivity() {
             statusText = "无法获取屏幕捕获权限，请重试"
             return
         }
+        cleanedUp = false
         mp.registerCallback(object : MediaProjection.Callback() {
             override fun onStop() {
                 Log.d(tag, "[投影被停止] MediaProjection.onStop 触发")
@@ -236,28 +236,46 @@ class ScreenCaptureActivity : ComponentActivity() {
                 null,
             )
             Log.d(tag, "[阶段7-创建VirtualDisplay] 结果=${if (virtualDisplay != null) "成功" else "返回 null"} density=$density")
+            if (virtualDisplay == null) {
+                // createVirtualDisplay 返回 null（常见于 Android 14 选了「单个应用」且选到自己）：
+                // 不会有帧产生，直接失败，不必等 3 秒超时。
+                Log.e(tag, "[阶段7-创建VirtualDisplay失败] 返回 null，判定为投影创建失败")
+                error = true
+                statusText = "屏幕捕获失败，请重试"
+                cleanup()
+                return
+            }
 
             imageReader?.setOnImageAvailableListener({ reader ->
-                // 帧已到达，取消超时兜底
-                Handler(Looper.getMainLooper()).removeCallbacks(captureTimeout)
+                // 清理后可能仍有已入队的回调：此时 ImageReader 已 close，直接跳过
+                if (cleanedUp) return@setOnImageAvailableListener
                 Log.d(tag, "[阶段8-图像回调] 触发，耗时=${System.currentTimeMillis() - t0}ms")
-                val image = reader.acquireLatestImage()
+                val image = try {
+                    reader.acquireLatestImage()
+                } catch (e: Exception) {
+                    Log.e(tag, "[阶段8-获取图像失败] ${e.javaClass.name}：${e.message}", e)
+                    null
+                }
                 Log.d(tag, "[阶段9-获取图像] acquireLatestImage 返回=${image != null}")
-                if (image != null) {
-                    try {
-                        bitmap = imageToBitmap(image)
-                        statusText = ""
-                        Log.d(tag, "[阶段9-转Bitmap成功] ${bitmap?.width}x${bitmap?.height}，耗时=${System.currentTimeMillis() - t0}ms")
-                    } catch (t: Throwable) {
-                        Log.e(tag, "[阶段9-转Bitmap失败] 异常类型=${t.javaClass.name}：${t.message}", t)
-                        error = true
-                        statusText = "截图失败：${t.javaClass.simpleName} ${t.message}"
-                    } finally {
-                        image.close()
-                        cleanup()
-                    }
-                } else {
-                    Log.w(tag, "[阶段9-获取图像] 图像为 null，未转换")
+                if (image == null) {
+                    // 首帧常未就绪：不清理、也不取消超时，等下一帧或 3 秒超时兜底，
+                    // 避免把「暂无帧」误判成失败而提前清理。
+                    Log.w(tag, "[阶段9-获取图像] 图像为 null，继续等待后续帧")
+                    return@setOnImageAvailableListener
+                }
+                // 拿到有效帧才取消超时
+                Handler(Looper.getMainLooper()).removeCallbacks(captureTimeout)
+                try {
+                    bitmap = imageToBitmap(image)
+                    statusText = ""
+                    Log.d(tag, "[阶段9-转Bitmap成功] ${bitmap?.width}x${bitmap?.height}，耗时=${System.currentTimeMillis() - t0}ms")
+                } catch (t: Throwable) {
+                    Log.e(tag, "[阶段9-转Bitmap失败] 异常类型=${t.javaClass.name}：${t.message}", t)
+                    error = true
+                    statusText = "截图失败：${t.javaClass.simpleName} ${t.message}"
+                } finally {
+                    image.close()
+                    cleanup()
                 }
             }, Handler(Looper.getMainLooper()))
 
@@ -279,6 +297,7 @@ class ScreenCaptureActivity : ComponentActivity() {
         val rowStride = plane.rowStride
         val rowPadding = rowStride - pixelStride * image.width
         val paddedWidth = image.width + rowPadding / pixelStride
+        buffer.rewind() // copyPixelsFromBuffer 从 current position 读，先归零避免个别设备读偏
         val bmp = Bitmap.createBitmap(paddedWidth, image.height, Bitmap.Config.ARGB_8888)
         bmp.copyPixelsFromBuffer(buffer)
         return if (paddedWidth == image.width) bmp
@@ -322,7 +341,11 @@ class ScreenCaptureActivity : ComponentActivity() {
     }
 
     private fun cleanup() {
+        if (cleanedUp) return
+        cleanedUp = true
         Handler(Looper.getMainLooper()).removeCallbacks(captureTimeout)
+        startCaptureRunnable?.let { Handler(Looper.getMainLooper()).removeCallbacks(it) }
+        startCaptureRunnable = null
         Log.d(tag, "[清理资源] 释放 VirtualDisplay/ImageReader/MediaProjection，停止前台服务")
         val mp = mediaProjection
         mediaProjection = null
@@ -379,12 +402,21 @@ private fun ScreenCaptureScreen(
     var start by remember { mutableStateOf<Offset?>(null) }
     var end by remember { mutableStateOf<Offset?>(null) }
 
-    // 1:1 绘制：截图按原始像素显示，框选坐标即 bitmap 像素坐标
-    val cropRect: Rect? = if (start != null && end != null && canvasSize != IntSize.Zero) {
-        val left = min(start!!.x, end!!.x).toInt().coerceIn(0, canvasSize.width)
-        val top = min(start!!.y, end!!.y).toInt().coerceIn(0, canvasSize.height)
-        val right = max(start!!.x, end!!.x).toInt().coerceIn(0, canvasSize.width)
-        val bottom = max(start!!.y, end!!.y).toInt().coerceIn(0, canvasSize.height)
+    // Canvas 比整屏截图小（下方有一行按钮），截图等比缩放居中绘制，
+    // 框选坐标再按同一比例反算回 bitmap 像素坐标，保证「框哪识别哪」。
+    val scale = if (canvasSize != IntSize.Zero && bitmap.width > 0 && bitmap.height > 0)
+        min(canvasSize.width.toFloat() / bitmap.width.toFloat(), canvasSize.height.toFloat() / bitmap.height.toFloat())
+    else 1f
+    val dstW = (bitmap.width * scale).roundToInt()
+    val dstH = (bitmap.height * scale).roundToInt()
+    val dstOffsetX = ((canvasSize.width - dstW) / 2f).roundToInt()
+    val dstOffsetY = ((canvasSize.height - dstH) / 2f).roundToInt()
+
+    val cropRect: Rect? = if (start != null && end != null && canvasSize != IntSize.Zero && scale > 0f) {
+        val left = ((min(start!!.x, end!!.x) - dstOffsetX) / scale).roundToInt().coerceIn(0, bitmap.width)
+        val top = ((min(start!!.y, end!!.y) - dstOffsetY) / scale).roundToInt().coerceIn(0, bitmap.height)
+        val right = ((max(start!!.x, end!!.x) - dstOffsetX) / scale).roundToInt().coerceIn(0, bitmap.width)
+        val bottom = ((max(start!!.y, end!!.y) - dstOffsetY) / scale).roundToInt().coerceIn(0, bitmap.height)
         if (right > left && bottom > top) Rect(left, top, right, bottom) else null
     } else null
 
@@ -419,7 +451,11 @@ private fun ScreenCaptureScreen(
                         )
                     },
             ) {
-                drawImage(imageBitmap)
+                drawImage(
+                    image = imageBitmap,
+                    dstOffset = IntOffset(dstOffsetX, dstOffsetY),
+                    dstSize = IntSize(dstW, dstH),
+                )
                 if (start != null && end != null) {
                     val left = min(start!!.x, end!!.x)
                     val top = min(start!!.y, end!!.y)
