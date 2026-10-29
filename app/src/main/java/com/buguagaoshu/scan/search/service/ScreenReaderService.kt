@@ -48,16 +48,22 @@ class ScreenReaderService : AccessibilityService() {
             }
         }
 
-        // 回退：事件自带文本 + 选区范围（个别 App 只在事件层给出选区）
+        // 回退：事件自带文本。两种形态：
+        //  1) 原生 TextView：event.text 是全文，from/to 是选区范围 → 截取；
+        //  2) WebView 等（源节点读不到文字）：event.text 本身就是选中的文字 → 整体采用。
         val eventText = event.text?.joinToString("") ?: ""
-        val from = event.fromIndex
-        val to = event.toIndex
-        if (from >= 0 && to > from && to <= eventText.length) {
-            val selected = eventText.substring(from, to).trim()
+        if (eventText.isNotEmpty()) {
+            val from = event.fromIndex
+            val to = event.toIndex
+            val hasRange = from >= 0 && to > from && to <= eventText.length
+            val selected = (if (hasRange) eventText.substring(from, to) else eventText).trim()
             if (selected.isNotEmpty()) {
-                Log.d("ScanSearchShare", "划词捕获(事件级) length=${selected.length}")
+                Log.d("ScanSearchShare", "划词捕获(事件级) length=${selected.length} hasRange=$hasRange")
                 StaticVariableConfig.selectedTextFlow.value = selected
             }
+        } else {
+            // 收到了选区事件、但事件里也拿不到文字：这类 App 不把选中文字暴露给无障碍，划词无能为力
+            Log.w("ScanSearchShare", "划词-事件级无文本 pkg=${event.packageName} from=${event.fromIndex} to=${event.toIndex}")
         }
     }
 
