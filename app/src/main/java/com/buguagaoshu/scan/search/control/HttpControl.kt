@@ -6,9 +6,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElementSerializer
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType
@@ -18,6 +15,8 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okio.IOException
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 object HttpControl {
@@ -62,45 +61,37 @@ object HttpControl {
     }
 
     // 构建请求体：无图片时走原序列化（保持与既有文本请求完全一致）；
-    // 有图片时把 user 消息的 content 变为 [text, image_url] 多模态数组（OpenAI 兼容格式）。
+    // 有图片时用 org.json 拼出 OpenAI 兼容多模态 content 数组（text + image_url）。
+    // 不用 kotlinx.serialization 的 JsonElement 构造器：其 JsonElementSerializer 是 internal，不可直接访问。
     private fun buildRequestBody(sendData: SendData, imageBase64: String?): String {
         if (imageBase64 == null) return Json.encodeToString(sendData)
-        val messages = buildJsonArray {
-            for (msg in sendData.messages) {
-                if (msg.role == "user") {
-                    add(
-                        buildJsonObject {
-                            put("role", msg.role)
-                            put(
-                                "content",
-                                buildJsonArray {
-                                    add(buildJsonObject { put("type", "text"); put("text", msg.content) })
-                                    add(
-                                        buildJsonObject {
-                                            put("type", "image_url")
-                                            put(
-                                                "image_url",
-                                                buildJsonObject {
-                                                    put("url", "data:image/jpeg;base64,$imageBase64")
-                                                },
-                                            )
-                                        },
-                                    )
-                                },
-                            )
-                        },
-                    )
-                } else {
-                    add(buildJsonObject { put("role", msg.role); put("content", msg.content) })
-                }
+        val root = JSONObject()
+        root.put("stream", sendData.stream)
+        root.put("model", sendData.model)
+        val messages = JSONArray()
+        for (msg in sendData.messages) {
+            val m = JSONObject()
+            m.put("role", msg.role)
+            if (msg.role == "user") {
+                val content = JSONArray()
+                val textPart = JSONObject()
+                textPart.put("type", "text")
+                textPart.put("text", msg.content)
+                content.put(textPart)
+                val imagePart = JSONObject()
+                imagePart.put("type", "image_url")
+                val imageUrl = JSONObject()
+                imageUrl.put("url", "data:image/jpeg;base64,$imageBase64")
+                imagePart.put("image_url", imageUrl)
+                content.put(imagePart)
+                m.put("content", content)
+            } else {
+                m.put("content", msg.content)
             }
+            messages.put(m)
         }
-        val body = buildJsonObject {
-            put("stream", sendData.stream)
-            put("model", sendData.model)
-            put("messages", messages)
-        }
-        return Json.encodeToString(JsonElementSerializer, body)
+        root.put("messages", messages)
+        return root.toString()
     }
 
     fun send(
