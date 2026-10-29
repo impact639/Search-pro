@@ -399,6 +399,20 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                         lastQuestion = questionText
                         answerText.value = ""
 
+                        // 框选截图 + 视觉模型能力探测：只有模型支持图片输入才把截图一起发，
+                        // 否则仅用 OCR 文字（不假装能理解图片，也不擅自切换模型）。
+                        val capturedImage = StaticVariableConfig.capturedImageFlow.value
+                        val supportsVision = StaticVariableConfig.supportsVision(config.modelName)
+                        val imageBase64 = if (capturedImage != null && supportsVision) capturedImage else null
+                        if (capturedImage != null && !supportsVision) {
+                            Log.d("ScanSearchCapture", "当前模型 ${config.modelName} 不支持图片输入，忽略框选截图，仅用 OCR 文字")
+                        }
+                        if (imageBase64 != null) {
+                            Log.d("ScanSearchCapture", "视觉模型 ${config.modelName}，图片+文字一起发送 base64长度=${imageBase64.length}")
+                            // 截图只用于本次提交，用完即清，避免把旧图附到后续无关问题上
+                            StaticVariableConfig.postCapturedImage(null)
+                        }
+
                         val sendData = SendData(
                             stream = streamInfo.value,
                             config.modelName,
@@ -423,6 +437,7 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                                 sendData,
                                 config.api,
                                 config.apiKey,
+                                imageBase64,
                                 onChunkReceived = { payload ->
                                     // payload 已是去掉 data: 前缀的 JSON，直接解析
                                     try {
@@ -465,6 +480,7 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                                 sendData,
                                 config.api,
                                 config.apiKey,
+                                imageBase64,
                                 onSuccess = { str ->
                                     loading = false
                                     Log.d("ScanSearchTime", "[完整回答结束] ${System.currentTimeMillis() - t0}ms")

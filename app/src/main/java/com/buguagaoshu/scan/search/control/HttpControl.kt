@@ -6,6 +6,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElementSerializer
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType
@@ -58,10 +61,53 @@ object HttpControl {
         Log.d(TAG, "[$tag] ${elapsedMs}ms")
     }
 
+    // 构建请求体：无图片时走原序列化（保持与既有文本请求完全一致）；
+    // 有图片时把 user 消息的 content 变为 [text, image_url] 多模态数组（OpenAI 兼容格式）。
+    private fun buildRequestBody(sendData: SendData, imageBase64: String?): String {
+        if (imageBase64 == null) return Json.encodeToString(sendData)
+        val messages = buildJsonArray {
+            for (msg in sendData.messages) {
+                if (msg.role == "user") {
+                    add(
+                        buildJsonObject {
+                            put("role", msg.role)
+                            put(
+                                "content",
+                                buildJsonArray {
+                                    add(buildJsonObject { put("type", "text"); put("text", msg.content) })
+                                    add(
+                                        buildJsonObject {
+                                            put("type", "image_url")
+                                            put(
+                                                "image_url",
+                                                buildJsonObject {
+                                                    put("url", "data:image/jpeg;base64,$imageBase64")
+                                                },
+                                            )
+                                        },
+                                    )
+                                },
+                            )
+                        },
+                    )
+                } else {
+                    add(buildJsonObject { put("role", msg.role); put("content", msg.content) })
+                }
+            }
+        }
+        val body = buildJsonObject {
+            put("stream", sendData.stream)
+            put("model", sendData.model)
+            put("messages", messages)
+        }
+        return Json.encodeToString(JsonElementSerializer, body)
+    }
+
     fun send(
         sendData: SendData,
         url: String,
         key: String,
+        imageBase64: String? = null,
         onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
@@ -70,7 +116,7 @@ object HttpControl {
         CoroutineScope(Dispatchers.IO).launch {
             var call: Call? = null
             try {
-                val body = Json.encodeToString(sendData).toRequestBody(contentType)
+                val body = buildRequestBody(sendData, imageBase64).toRequestBody(contentType)
                 val req = Request.Builder()
                     .url(url)
                     .post(body)
@@ -103,6 +149,7 @@ object HttpControl {
         sendData: SendData,
         url: String,
         key: String,
+        imageBase64: String? = null,
         // 已解析出的 SSE data: JSON 载荷（去掉 "data:" 前缀）
         onChunkReceived: (String) -> Unit,
         onComplete: () -> Unit,
@@ -111,7 +158,7 @@ object HttpControl {
         val t0 = System.currentTimeMillis()
         Log.d(TAG, "流式请求开始 model=${sendData.model}")
         CoroutineScope(Dispatchers.IO).launch {
-            val body = Json.encodeToString(sendData).toRequestBody(contentType)
+            val body = buildRequestBody(sendData, imageBase64).toRequestBody(contentType)
             val req = Request.Builder()
                 .url(url)
                 .post(body)

@@ -14,6 +14,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Base64
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -58,6 +59,7 @@ import com.buguagaoshu.scan.search.ui.theme.SearchTheme
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
+import java.io.ByteArrayOutputStream
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -313,6 +315,25 @@ class ScreenCaptureActivity : ComponentActivity() {
         return Bitmap.createBitmap(src, left, top, right - left, bottom - top)
     }
 
+    // 裁剪图转 base64 JPEG（长边缩到 1024 以内，控制请求体大小，避免超大截图）
+    private fun bitmapToBase64Jpeg(bitmap: Bitmap): String {
+        val maxDim = 1024
+        val scaled = if (bitmap.width > maxDim || bitmap.height > maxDim) {
+            val scale = min(maxDim.toFloat() / bitmap.width, maxDim.toFloat() / bitmap.height)
+            Bitmap.createScaledBitmap(
+                bitmap,
+                (bitmap.width * scale).roundToInt(),
+                (bitmap.height * scale).roundToInt(),
+                true,
+            )
+        } else {
+            bitmap
+        }
+        val out = ByteArrayOutputStream()
+        scaled.compress(Bitmap.CompressFormat.JPEG, 85, out)
+        return Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+    }
+
     private fun runOcr(bitmap: Bitmap) {
         statusText = "正在识别文字…"
         val ocrT0 = System.currentTimeMillis()
@@ -330,6 +351,16 @@ class ScreenCaptureActivity : ComponentActivity() {
                 } else {
                     // 复用统一文本导入通道，回填悬浮窗输入框
                     StaticVariableConfig.postSharedText(text)
+                    // 额外保存裁剪截图：视觉模型可用于图片理解/公式识别；非视觉模型在提交时自动忽略。
+                    // OCR 文字仍作为辅助保留，不替代截图。
+                    try {
+                        val b64 = bitmapToBase64Jpeg(bitmap)
+                        StaticVariableConfig.postCapturedImage(b64)
+                        Log.d(tag, "[阶段12-保存裁剪截图] base64长度=${b64.length} 尺寸=${bitmap.width}x${bitmap.height}")
+                    } catch (e: Exception) {
+                        StaticVariableConfig.postCapturedImage(null)
+                        Log.w(tag, "[阶段12-保存裁剪截图失败] ${e.message}")
+                    }
                     FxComposeControl.showSearchWindow()
                     finish()
                 }

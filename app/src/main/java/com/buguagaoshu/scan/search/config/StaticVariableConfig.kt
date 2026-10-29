@@ -24,6 +24,25 @@ object StaticVariableConfig {
     // 锁定状态：主浮窗固定(锁定)还是可拖动(解锁)，供悬浮窗图标同步
     val isLockedFlow = MutableStateFlow(true)
 
+    // 框选截图的 base64（JPEG）。配合视觉模型做图片理解/公式识别；非视觉模型时忽略。
+    // 每次框选识别成功后覆盖；提交一次后清空，避免把旧图附到无关的新问题上。
+    val capturedImageFlow = MutableStateFlow<String?>(null)
+
+    fun postCapturedImage(base64: String?) {
+        capturedImageFlow.value = base64
+    }
+
+    // 依据模型名启发式判断是否支持图片（vision）输入。仅作能力探测：
+    // 不确定时返回 false，宁可退回 OCR 文字，也不假装能识别图片。DeepSeek 文本模型不在列表内，正确返回 false。
+    fun supportsVision(modelName: String): Boolean {
+        val m = modelName.lowercase()
+        return listOf(
+            "vl", "vision", "gpt-4o", "gpt-4.1", "gpt-4.5", "gpt-5",
+            "o1", "o3", "o4", "claude", "gemini", "qwen-vl", "glm-4v",
+            "llava", "minicpm-v", "internvl", "pixtral", "step-1v", "moonshot-vl",
+        ).any { m.contains(it) }
+    }
+
     // 存储配置好的 API 列表
     var apiConfigMap : MutableMap<String, ConfigData> = mutableMapOf()
     var API_MAP = "API_MAP"
