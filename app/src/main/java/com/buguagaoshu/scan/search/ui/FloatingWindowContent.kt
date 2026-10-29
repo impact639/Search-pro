@@ -141,6 +141,9 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                 else current.trimEnd() + "\n" + selectedText
             )
             Log.d("ScanSearchShare", "划词文字已填入输入框 length=${selectedText.length}")
+            // 消费后复位：selectedTextFlow 是无障碍服务的原始 StateFlow，不复位的话
+            // 关闭浮窗再打开（重新组合）时会把旧选区再次填进去，破坏「重开默认清空」。
+            StaticVariableConfig.selectedTextFlow.value = ""
         }
     }
 
@@ -155,6 +158,8 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
             else current.trimEnd() + "\n" + ev.text
         )
         Log.d("ScanSearchShare", "分享文字已填入输入框 seq=${ev.seq} length=${ev.text.length}")
+        // 消费后复位为 null：避免关闭重开（重新组合）时把上一次的分享事件再次填入
+        StaticVariableConfig.sharedTextFlow.value = null
     }
 
     // 轻量聊天记录（内存态，可回看上次回答）
@@ -202,7 +207,13 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                 isLocked = isLocked,
                 onCollapse = { FxComposeControl.hideSearch(application) },
                 onToggleLock = { FxComposeControl.updateDisplayMode() },
-                onClose = { FxComposeControl.cancel() },
+                onClose = {
+                    FxComposeControl.cancel()
+                    // 关闭（X）时清空待发送输入：下次打开默认空白。
+                    // 只清 questionText，不动 answerText/history；也不在这里清 selectedText/sharedText，
+                    // 因为那两份已在上方 LaunchedEffect 消费后复位，避免把「刚收到的分享/OCR」误清掉。
+                    commonViewModel.clearQuestionText()
+                },
             )
 
             // 模式选择（核心，始终可见）+「更多」入口
@@ -375,13 +386,25 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
 
                 Button(
                     onClick = submit@{
-                        // 空值校验：无可用配置或问题为空时安全退出，避免空指针
+                        // 空值校验：无可用配置时安全退出，避免空指针
                         val config = selectedConfigData
                         if (config == null) {
                             android.widget.Toast.makeText(context, noConfigTips, android.widget.Toast.LENGTH_SHORT).show()
                             return@submit
                         }
-                        if (questionText.isBlank()) {
+
+                        // 框选截图 + 视觉模型能力探测：只有模型支持图片输入才把截图一起发，
+                        // 否则仅用 OCR 文字（不假装能理解图片，也不擅自切换模型）。
+                        // 先于空校验计算，因为纯图表/公式选区可能 OCR 出空文字，但只要带了截图且模型支持视觉就允许提交。
+                        val capturedImage = StaticVariableConfig.capturedImageFlow.value
+                        val supportsVision = StaticVariableConfig.supportsVision(config.modelName)
+                        val imageBase64 = if (capturedImage != null && supportsVision) capturedImage else null
+                        if (capturedImage != null && !supportsVision) {
+                            Log.d("ScanSearchCapture", "当前模型 ${config.modelName} 不支持图片输入，忽略框选截图，仅用 OCR 文字")
+                        }
+
+                        // 空校验：既没有文字、也没有可用的截图时退出
+                        if (questionText.isBlank() && imageBase64 == null) {
                             return@submit
                         }
 
@@ -399,26 +422,29 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                         lastQuestion = questionText
                         answerText.value = ""
 
-                        // 框选截图 + 视觉模型能力探测：只有模型支持图片输入才把截图一起发，
-                        // 否则仅用 OCR 文字（不假装能理解图片，也不擅自切换模型）。
-                        val capturedImage = StaticVariableConfig.capturedImageFlow.value
-                        val supportsVision = StaticVariableConfig.supportsVision(config.modelName)
-                        val imageBase64 = if (capturedImage != null && supportsVision) capturedImage else null
-                        if (capturedImage != null && !supportsVision) {
-                            Log.d("ScanSearchCapture", "当前模型 ${config.modelName} 不支持图片输入，忽略框选截图，仅用 OCR 文字")
-                        }
                         if (imageBase64 != null) {
                             Log.d("ScanSearchCapture", "视觉模型 ${config.modelName}，图片+文字一起发送 base64长度=${imageBase64.length}")
                             // 截图只用于本次提交，用完即清，避免把旧图附到后续无关问题上
                             StaticVariableConfig.postCapturedImage(null)
                         }
 
+                        // 有截图时，把「图片已附带」这件事写进 user 文案，提示视觉模型看图。
+                        // 纯图表时 questionText 可能为空，仍给出明确指令，避免模型对着空文本发呆。
+                        val userText = if (imageBase64 != null) {
+                            if (questionText.isBlank()) {
+                                "下面附了一张框选截图，请识别并解释图中的内容（可能是数学公式、图表、几何图或流程图）。"
+                            } else {
+                                "下面附了一张框选截图，请结合图片内容回答我的问题：\n$questionText"
+                            }
+                        } else {
+                            questionText
+                        }
                         val sendData = SendData(
                             stream = streamInfo.value,
                             config.modelName,
                             listOf(
                                 SendMessage("system", prompt),
-                                SendMessage("user", questionText),
+                                SendMessage("user", userText),
                             ),
                         )
                         val jsonConfig = Json {

@@ -134,6 +134,13 @@ class CommonViewModel @Inject constructor() : ViewModel() {
         }
     }
 
+    // 清空「待发送输入」：仅在关闭悬浮窗时调用，不触碰历史回答等其他状态。
+    // 放在 ViewModel 里而不是 Compose 的 remember 里，是因为 questionText 本来就是
+    // ViewModel 作用域（随 MainActivity 存活），关闭浮窗不会销毁它，必须显式重置。
+    fun clearQuestionText() {
+        _questionText.value = ""
+    }
+
 
     fun updateApiKeyText(newText: String) {
         viewModelScope.launch {

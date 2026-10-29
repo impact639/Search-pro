@@ -57,10 +57,17 @@ class MainActivity : ComponentActivity() {
     private fun handleShareIntent(intent: Intent?) {
         if (intent?.action != Intent.ACTION_SEND) return
         if (intent.type?.startsWith("text/") != true) return
-        val text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.trim()
+        var text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.trim()
+        // 部分应用（个别分享面板/浏览器）把文字放在 ClipData 里而非 EXTRA_TEXT，这里兜底读取
+        if (text.isNullOrBlank()) {
+            val clip = intent.clipData
+            if (clip != null && clip.itemCount > 0) {
+                text = clip.getItemAt(0)?.coerceToText(this)?.toString()?.trim()
+            }
+        }
         if (text.isNullOrBlank()) {
             // 第三方应用提供的是空分享（如只分享链接或图片）：明确记录，不假装拿到了文字
-            Log.w("ScanSearchShare", "收到 ACTION_SEND 但 EXTRA_TEXT 为空 action=${intent.action} type=${intent.type}")
+            Log.w("ScanSearchShare", "收到 ACTION_SEND 但无可用文字 action=${intent.action} type=${intent.type}")
             return
         }
         // 只记长度，不记录用户选中的完整私人文段

@@ -103,7 +103,7 @@ object HttpControl {
         onError: (String) -> Unit
     ) {
         val t0 = System.currentTimeMillis()
-        Log.d(TAG, "非流式请求开始 model=${sendData.model}")
+        Log.d(TAG, "非流式请求开始 model=${sendData.model} image=${if (imageBase64 != null) "有(${imageBase64.length}字符)" else "无"}")
         CoroutineScope(Dispatchers.IO).launch {
             var call: Call? = null
             try {
@@ -124,6 +124,10 @@ object HttpControl {
                         postMain { onSuccess(responseBody) }
                     } else {
                         log("非流式-错误 HTTP ${data.code}", System.currentTimeMillis() - t0)
+                        // 记录错误响应体前 200 字：多模态请求被拒时服务端通常在此说明原因
+                        // （如「model 不支持 image」）。不含 API Key，也不回显请求体。
+                        val errBody = try { data.body?.string()?.take(200) } catch (e: Exception) { null }
+                        if (!errBody.isNullOrBlank()) Log.w(TAG, "非流式-错误响应体(前200字)=${errBody}")
                         postMain { onError("HTTP ${data.code}") }
                     }
                 }
@@ -147,7 +151,7 @@ object HttpControl {
         onError: (String) -> Unit
     ) {
         val t0 = System.currentTimeMillis()
-        Log.d(TAG, "流式请求开始 model=${sendData.model}")
+        Log.d(TAG, "流式请求开始 model=${sendData.model} image=${if (imageBase64 != null) "有(${imageBase64.length}字符)" else "无"}")
         CoroutineScope(Dispatchers.IO).launch {
             val body = buildRequestBody(sendData, imageBase64).toRequestBody(contentType)
             val req = Request.Builder()
@@ -169,6 +173,9 @@ object HttpControl {
                     response.use {
                         if (!response.isSuccessful) {
                             log("流式-错误 HTTP ${response.code}", System.currentTimeMillis() - t0)
+                            // 记录错误响应体前 200 字：多模态请求被拒时服务端通常在此说明原因
+                            val errBody = try { response.body?.string()?.take(200) } catch (e: Exception) { null }
+                            if (!errBody.isNullOrBlank()) Log.w(TAG, "流式-错误响应体(前200字)=${errBody}")
                             postMain { onError("HTTP ${response.code}") }
                         } else {
                             log("流式-响应头到达", System.currentTimeMillis() - t0)
