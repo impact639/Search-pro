@@ -1,6 +1,8 @@
 package com.buguagaoshu.scan.search.ui
 
+import android.content.Intent
 import android.net.Uri
+import android.provider.Settings
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -106,6 +108,30 @@ fun HomePage(commonViewModel: CommonViewModel, openFloatingWindow: () -> Unit) {
             ) {
                 Text(stringResource(TextValue.open_float))
             }
+
+            // 划词启用入口：划词依赖无障碍服务，重装 APK 后会被系统关闭，需手动重新开启。
+            // 不再在 onCreate 里强制跳转无障碍设置页（那样会打断第三方分享流程），改为这里手动进入。
+            OutlinedButton(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = {
+                    try {
+                        context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    } catch (e: Exception) {
+                        android.widget.Toast.makeText(
+                            context,
+                            context.getString(TextValue.open_accessibility_failed),
+                            android.widget.Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                },
+            ) {
+                Text(stringResource(TextValue.enable_selection))
+            }
+            Text(
+                text = stringResource(TextValue.enable_selection_tips),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
 
             // 配置列表
             Column(verticalArrangement = Arrangement.spacedBy(Dimens.SpaceSm)) {

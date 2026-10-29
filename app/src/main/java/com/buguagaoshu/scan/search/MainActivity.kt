@@ -2,6 +2,7 @@ package com.buguagaoshu.scan.search
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -57,7 +58,13 @@ class MainActivity : ComponentActivity() {
         if (intent?.action != Intent.ACTION_SEND) return
         if (intent.type?.startsWith("text/") != true) return
         val text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.trim()
-        if (text.isNullOrBlank()) return
+        if (text.isNullOrBlank()) {
+            // 第三方应用提供的是空分享（如只分享链接或图片）：明确记录，不假装拿到了文字
+            Log.w("ScanSearchShare", "收到 ACTION_SEND 但 EXTRA_TEXT 为空 action=${intent.action} type=${intent.type}")
+            return
+        }
+        // 只记长度，不记录用户选中的完整私人文段
+        Log.d("ScanSearchShare", "收到第三方分享文字 length=${text.length}")
         StaticVariableConfig.postSharedText(text)
         // 打开主浮窗（已安装则显示），让用户看到填入的问题
         FxComposeControl.openSearchWindow(application, commonViewModel)

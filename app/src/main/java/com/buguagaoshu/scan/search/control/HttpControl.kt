@@ -119,6 +119,7 @@ object HttpControl {
                 .build()
             val call = streamClient.newCall(req)
             activeCall = call
+            log("流式-本地准备完成", System.currentTimeMillis() - t0)
             call.enqueue(object : Callback {
                 override fun onFailure(call: Call, e: IOException) {
                     log("流式-失败 ${e.javaClass.simpleName}", System.currentTimeMillis() - t0)

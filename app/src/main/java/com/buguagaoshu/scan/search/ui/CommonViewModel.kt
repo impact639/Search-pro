@@ -39,38 +39,6 @@ class CommonViewModel @Inject constructor() : ViewModel() {
             如果用户没有明确问题，就默认讲解选中内容的要点；回答保持简洁，先讲清楚再追求完整。
         """.trimIndent()
 
-        // 解题模式：原来的搜题/解题 prompt
-        val PROMPT_SOLVE = """
-            【角色设定】
-            你是一位拥有全学科解题能力的专家导师，擅长通过分步拆解和逻辑推理解决难题。请按以下流程处理问题，如果用户提问不属于解题类型，也请你根据你自身的能力给用户进行解答，充当一个乐于助人的助理：
-
-            1. 题型识别
-            - 判断题目所属学科及知识点（如：高中数学/三角函数）
-            - 分析题目难度等级（基础/进阶/竞赛级）
-
-            2. 需求确认
-            - 明确用户需求类型：
-              ✅ 纯答案需求 → 简洁模式
-              ✅ 分步解析 → 教学模式
-              ✅ 思路点拨 → 启发模式
-              ✅ 答案验证 → 反向推导检查
-
-            3. 解题过程
-            - 关键公式/定理标注（如：使用勾股定理）
-            - 建立数学模型/逻辑框架
-            - 展示至少两种解题方法（如：代数法/几何法）
-            - 易错点预警（如：符号错误/单位换算）
-
-            4. 结果验证
-            - 交叉验证法（如：代入检验/极限值测试）
-            - 可视化辅助（几何题建议画图步骤）
-
-            5. 输出结构
-            - 先给出详细讲解（解题依据、分步推导、易错点）。
-            - 最后另起一行输出「【最终答案】」，紧接着给出本题最精简的答案/结论。
-
-            注意：涉及公式时，请用 LaTeX 语法书写，行内用 ${'$'}...${'$'}、单独成行用 ${'$'}${'$'}...${'$'}${'$'}，界面会自动渲染成排版好的数学公式。
-        """.trimIndent()
     }
 
     private val _apiMap = mutableStateMapOf<String, ConfigData>()
@@ -98,10 +66,6 @@ class CommonViewModel @Inject constructor() : ViewModel() {
     // 存储prompt（默认解释模式）
     private val _promptText = MutableStateFlow(PROMPT_EXPLAIN)
     val promptText = _promptText.asStateFlow()
-
-    // 提示词模式：true=解释（默认），false=解题
-    private val _explainMode = MutableStateFlow(true)
-    val explainMode = _explainMode.asStateFlow()
 
 
     val apiMap: Map<String, ConfigData> get() = _apiMap
@@ -143,14 +107,6 @@ class CommonViewModel @Inject constructor() : ViewModel() {
     fun updatePrompt(newPrompt: String) {
         viewModelScope.launch {
             _promptText.value = newPrompt
-        }
-    }
-
-    // 切换解释/解题模式
-    fun setPromptMode(explain: Boolean) {
-        viewModelScope.launch {
-            _explainMode.value = explain
-            _promptText.value = if (explain) PROMPT_EXPLAIN else PROMPT_SOLVE
         }
     }
 

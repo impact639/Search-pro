@@ -94,7 +94,6 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
     val requestFailedText = stringResource(TextValue.request_failed)
     val modeText = stringResource(TextValue.mode)
     val explainText = stringResource(TextValue.explain)
-    val solveText = stringResource(TextValue.solve)
     val noConfigTips = stringResource(TextValue.no_config_tips)
     val captureScreenText = stringResource(TextValue.capture_screen)
     val webText = stringResource(TextValue.web)
@@ -124,7 +123,6 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
 
     val questionText by commonViewModel.questionText.collectAsState()
     val prompt by commonViewModel.promptText.collectAsState()
-    val explainMode by commonViewModel.explainMode.collectAsState()
     val isLocked by StaticVariableConfig.isLockedFlow.collectAsState()
 
     val view = LocalView.current
@@ -142,6 +140,7 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                 if (current.isBlank()) selectedText
                 else current.trimEnd() + "\n" + selectedText
             )
+            Log.d("ScanSearchShare", "划词文字已填入输入框 length=${selectedText.length}")
         }
     }
 
@@ -155,6 +154,7 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
             if (current.isBlank()) ev.text
             else current.trimEnd() + "\n" + ev.text
         )
+        Log.d("ScanSearchShare", "分享文字已填入输入框 seq=${ev.seq} length=${ev.text.length}")
     }
 
     // 轻量聊天记录（内存态，可回看上次回答）
@@ -214,17 +214,11 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                 horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceXs),
             ) {
                 Text(text = modeText, style = MaterialTheme.typography.labelMedium)
-                FilterChip(
-                    selected = explainMode,
-                    onClick = { commonViewModel.setPromptMode(true) },
-                    label = { Text(explainText, style = TextStyle(fontSize = 12.sp)) },
-                    modifier = Modifier.height(28.dp),
-                )
-                FilterChip(
-                    selected = !explainMode,
-                    onClick = { commonViewModel.setPromptMode(false) },
-                    label = { Text(solveText, style = TextStyle(fontSize = 12.sp)) },
-                    modifier = Modifier.height(28.dp),
+                // 仅保留「解释」模式（已删除「解题」模式，输入区始终按解释 prompt 处理）
+                Text(
+                    text = explainText,
+                    style = TextStyle(fontSize = 12.sp),
+                    color = MaterialTheme.colorScheme.primary,
                 )
                 Spacer(modifier = Modifier.weight(1f))
                 Text(
@@ -499,7 +493,7 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                     ),
                 ) {
                     Text(
-                        if (explainMode) explainText else solveText,
+                        explainText,
                         style = TextStyle(fontSize = 14.sp),
                     )
                 }

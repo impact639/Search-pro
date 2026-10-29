@@ -15,6 +15,9 @@
     <string name="confirm">确认</string>
     <string name="cancel">取消</string>
     <string name="open_float">打开浮窗</string>
+    <string name="enable_selection">启用划词（选中文字自动填入）</string>
+    <string name="enable_selection_tips">划词依赖无障碍服务，重装应用后需在这里重新开启</string>
+    <string name="open_accessibility_failed">无法打开无障碍设置</string>
     <string name="usage_guide">使用指南</string>
     <string name="float_title">问一下</string>
     <string name="search_tips">选中文字自动填入，或在此输入</string>
