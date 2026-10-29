@@ -141,6 +141,7 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                 else current.trimEnd() + "\n" + selectedText
             )
             Log.d("ScanSearchShare", "划词文字已填入输入框 length=${selectedText.length}")
+            android.widget.Toast.makeText(context, "已填入选中文字", android.widget.Toast.LENGTH_SHORT).show()
             // 消费后复位：selectedTextFlow 是无障碍服务的原始 StateFlow，不复位的话
             // 关闭浮窗再打开（重新组合）时会把旧选区再次填进去，破坏「重开默认清空」。
             StaticVariableConfig.selectedTextFlow.value = ""
@@ -158,6 +159,7 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
             else current.trimEnd() + "\n" + ev.text
         )
         Log.d("ScanSearchShare", "分享文字已填入输入框 seq=${ev.seq} length=${ev.text.length}")
+        android.widget.Toast.makeText(context, "已填入输入框", android.widget.Toast.LENGTH_SHORT).show()
         // 消费后复位为 null：避免关闭重开（重新组合）时把上一次的分享事件再次填入
         StaticVariableConfig.sharedTextFlow.value = null
     }

@@ -72,9 +72,18 @@ class MainActivity : ComponentActivity() {
         }
         // 只记长度，不记录用户选中的完整私人文段
         Log.d("ScanSearchShare", "收到第三方分享文字 length=${text.length}")
+        // 可见确认：Toast 明确告知「分享已收到」，用于区分「没收到 Intent」还是「收到了但没回填」
+        android.widget.Toast.makeText(
+            this,
+            "问一下已收到分享文字（${text.length}字）",
+            android.widget.Toast.LENGTH_LONG
+        ).show()
         StaticVariableConfig.postSharedText(text)
-        // 打开主浮窗（已安装则显示），让用户看到填入的问题
-        FxComposeControl.openSearchWindow(application, commonViewModel)
+        // 延后到 onResume 之后再显示浮窗：个别系统（MagicOS/Android 16）在 onCreate 阶段
+        // 显示系统悬浮窗可能被延迟或拦截；先推文字、再在主循环下一拍打开浮窗更稳。
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            FxComposeControl.openSearchWindow(application, commonViewModel)
+        }
     }
 
     private fun initData(commonViewModel: CommonViewModel) {
