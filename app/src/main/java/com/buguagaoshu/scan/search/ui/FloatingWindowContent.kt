@@ -134,12 +134,9 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
     val selectedText by StaticVariableConfig.selectedTextFlow.collectAsState()
     LaunchedEffect(selectedText) {
         if (selectedText.isNotBlank()) {
-            // 与分享一致：已有未提交内容时追加，不静默覆盖
-            val current = commonViewModel.questionText.value
-            commonViewModel.updateQuestionText(
-                if (current.isBlank()) selectedText
-                else current.trimEnd() + "\n" + selectedText
-            )
+            // 划词语义是「替换」而非「追加」：每次新选区整体覆盖旧内容。
+            // 追加会把手柄拖动过程中的中间选区（he→hello→hello world）拼成乱码，这是回归根因。
+            commonViewModel.updateQuestionText(selectedText)
             Log.d("ScanSearchShare", "划词文字已填入输入框 length=${selectedText.length}")
             android.widget.Toast.makeText(context, "已填入选中文字", android.widget.Toast.LENGTH_SHORT).show()
             // 消费后复位：selectedTextFlow 是无障碍服务的原始 StateFlow，不复位的话
