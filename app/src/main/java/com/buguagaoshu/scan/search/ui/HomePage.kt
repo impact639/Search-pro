@@ -121,13 +121,14 @@ fun HomePage(commonViewModel: CommonViewModel, openFloatingWindow: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
                 onClick = {
                     try {
-                        // 直接打开「问一下」的无障碍服务详情页（带开关），比通用无障碍列表更省事
-                        val intent = Intent(Settings.ACTION_ACCESSIBILITY_DETAILS_SETTINGS).apply {
-                            data = Uri.parse("package:${context.packageName}")
+                        // 尝试直达本应用的无障碍详情页。该 action 是 Android 15+ 才有的隐藏系统 action，
+                        // 未进公开 SDK（用字符串常量绕过编译检查），且要求用 EXTRA_COMPONENT_NAME 指定服务。
+                        val intent = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS").apply {
+                            putExtra(Intent.EXTRA_COMPONENT_NAME, ComponentName(context, ScreenReaderService::class.java))
                         }
                         context.startActivity(intent)
                     } catch (e: Exception) {
-                        // 个别系统不支持详情页 intent 时回退到通用无障碍列表
+                        // 设备不支持详情页 action 时回退到通用无障碍列表
                         try {
                             context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                         } catch (e2: Exception) {
