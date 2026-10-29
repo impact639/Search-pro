@@ -345,25 +345,25 @@ class ScreenCaptureActivity : ComponentActivity() {
                 recognizer.close()
                 val text = visionText.text?.trim() ?: ""
                 Log.d(tag, "[阶段12-OCR成功] 识别到 ${text.length} 字符，耗时=${System.currentTimeMillis() - ocrT0}ms")
-                if (text.isBlank()) {
-                    Log.w(tag, "[阶段12-OCR结果为空]")
-                    statusText = "未识别到文字，请重新框选"
-                } else {
-                    // 复用统一文本导入通道，回填悬浮窗输入框
-                    StaticVariableConfig.postSharedText(text)
-                    // 额外保存裁剪截图：视觉模型可用于图片理解/公式识别；非视觉模型在提交时自动忽略。
-                    // OCR 文字仍作为辅助保留，不替代截图。
-                    try {
-                        val b64 = bitmapToBase64Jpeg(bitmap)
-                        StaticVariableConfig.postCapturedImage(b64)
-                        Log.d(tag, "[阶段12-保存裁剪截图] base64长度=${b64.length} 尺寸=${bitmap.width}x${bitmap.height}")
-                    } catch (e: Exception) {
-                        StaticVariableConfig.postCapturedImage(null)
-                        Log.w(tag, "[阶段12-保存裁剪截图失败] ${e.message}")
-                    }
-                    FxComposeControl.showSearchWindow()
-                    finish()
+                // 无论是否识别到文字，都保存裁剪截图：视觉模型可理解纯图表/公式；非视觉模型提交时自动忽略。
+                try {
+                    val b64 = bitmapToBase64Jpeg(bitmap)
+                    StaticVariableConfig.postCapturedImage(b64)
+                    Log.d(tag, "[阶段12-保存裁剪截图] base64长度=${b64.length} 尺寸=${bitmap.width}x${bitmap.height}")
+                } catch (e: Exception) {
+                    StaticVariableConfig.postCapturedImage(null)
+                    Log.w(tag, "[阶段12-保存裁剪截图失败] ${e.message}")
                 }
+                if (text.isBlank()) {
+                    // 纯图表/公式可能没有可识别文字：仍回到浮窗，让用户输入问题后连同截图一起提交
+                    Log.w(tag, "[阶段12-OCR结果为空] 无文字，仅保留截图供视觉模型理解")
+                    Toast.makeText(this, "未识别到文字；如为图表可直接在浮窗输入问题后提交", Toast.LENGTH_SHORT).show()
+                } else {
+                    // 复用统一文本导入通道，回填悬浮窗输入框（OCR 文字作为辅助，不替代截图）
+                    StaticVariableConfig.postSharedText(text)
+                }
+                FxComposeControl.showSearchWindow()
+                finish()
             }
             .addOnFailureListener { e ->
                 recognizer.close()
