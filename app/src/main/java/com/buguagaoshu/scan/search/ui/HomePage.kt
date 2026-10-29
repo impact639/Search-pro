@@ -115,13 +115,22 @@ fun HomePage(commonViewModel: CommonViewModel, openFloatingWindow: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
                 onClick = {
                     try {
-                        context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                        // 直接打开「问一下」的无障碍服务详情页（带开关），比通用无障碍列表更省事
+                        val intent = Intent(Settings.ACTION_ACCESSIBILITY_DETAILS_SETTINGS).apply {
+                            data = Uri.parse("package:${context.packageName}")
+                        }
+                        context.startActivity(intent)
                     } catch (e: Exception) {
-                        android.widget.Toast.makeText(
-                            context,
-                            context.getString(TextValue.open_accessibility_failed),
-                            android.widget.Toast.LENGTH_SHORT,
-                        ).show()
+                        // 个别系统不支持详情页 intent 时回退到通用无障碍列表
+                        try {
+                            context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                        } catch (e2: Exception) {
+                            android.widget.Toast.makeText(
+                                context,
+                                context.getString(TextValue.open_accessibility_failed),
+                                android.widget.Toast.LENGTH_SHORT,
+                            ).show()
+                        }
                     }
                 },
             ) {
