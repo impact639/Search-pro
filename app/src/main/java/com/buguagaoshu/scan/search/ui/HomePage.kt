@@ -1,5 +1,7 @@
 package com.buguagaoshu.scan.search.ui
 
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -52,6 +54,7 @@ import com.buguagaoshu.scan.search.control.HttpControl
 import com.buguagaoshu.scan.search.data.ConfigData
 import com.buguagaoshu.scan.search.data.SendData
 import com.buguagaoshu.scan.search.data.SendMessage
+import com.buguagaoshu.scan.search.service.ScreenReaderService
 import com.buguagaoshu.scan.search.ui.theme.Dimens
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -62,6 +65,9 @@ import com.buguagaoshu.scan.search.R.string as TextValue
 fun HomePage(commonViewModel: CommonViewModel, openFloatingWindow: () -> Unit) {
     val configMap = commonViewModel.apiMap
     val context = LocalContext.current
+
+    // 无障碍服务（划词）当前是否已开启；进入首页时读取一次，帮助不依赖 adb 判断状态
+    val screenReaderEnabled = remember { mutableStateOf(isScreenReaderEnabled(context)) }
 
     // 当前选中（高亮）的配置 id；与 map 中的 cheek 标志保持同步
     var selectedConfigId by remember { mutableStateOf<String?>(null) }
@@ -140,6 +146,21 @@ fun HomePage(commonViewModel: CommonViewModel, openFloatingWindow: () -> Unit) {
                 text = stringResource(TextValue.enable_selection_tips),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            // 划词服务状态提示：绿=已开启可用，红=未开启（重装后会被系统关闭，需点上面按钮重新开启）
+            Text(
+                text = if (screenReaderEnabled.value) {
+                    context.getString(TextValue.accessibility_enabled)
+                } else {
+                    context.getString(TextValue.accessibility_disabled)
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = if (screenReaderEnabled.value) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.error
+                },
             )
 
             // 配置列表
@@ -333,6 +354,25 @@ fun HomePage(commonViewModel: CommonViewModel, openFloatingWindow: () -> Unit) {
                 }
             },
         )
+    }
+}
+
+// 判断无障碍服务（划词）是否已开启：读取系统已启用服务列表并匹配组件名
+private fun isScreenReaderEnabled(context: Context): Boolean {
+    return try {
+        val enabled = Settings.Secure.getString(
+            context.contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+        ) ?: return false
+        val component = ComponentName(context, ScreenReaderService::class.java)
+        enabled
+            .split(':')
+            .any {
+                it.equals(component.flattenToString(), ignoreCase = true) ||
+                    it.equals(component.flattenToShortString(), ignoreCase = true)
+            }
+    } catch (e: Exception) {
+        false
     }
 }
 
