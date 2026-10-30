@@ -102,12 +102,18 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
     val sizeSmallText = stringResource(TextValue.size_small)
     val sizeMediumText = stringResource(TextValue.size_medium)
     val sizeLargeText = stringResource(TextValue.size_large)
+    val summarizeText = stringResource(TextValue.summarize_content)
+    val generateQuizText = stringResource(TextValue.generate_quiz)
+    val revealAnswerText = stringResource(TextValue.reveal_answer)
 
     val showResultVisible = remember { mutableStateOf(false) }
     val showWebView = remember { mutableStateOf(false) }
     val answerText = remember { mutableStateOf("") }
     // 请求进行中（首字到达前显示加载提示）
     var loading by remember { mutableStateOf(false) }
+
+    // 「生成练习题」答案揭示状态：题目先展示，点「查看答案」后才显示答案与解析
+    var quizRevealed by remember { mutableStateOf(false) }
 
     val streamInfo = remember { mutableStateOf(true) }
     val moreExpanded = remember { mutableStateOf(false) }
@@ -188,6 +194,130 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
             commonViewModel.showUserSelectConfig(newSelected)
         }
         commonViewModel.updateConfig(context)
+    }
+
+    // 当前「问题 + 回答」拼成一段显式上下文：总结/出题都基于它，不依赖不确定的历史状态
+    fun buildContextText(): String {
+        val a = answerText.value
+        val q = lastQuestion
+        return when {
+            a.isNotBlank() && q.isNotBlank() -> "【问题】\n$q\n\n【回答】\n$a"
+            a.isNotBlank() -> a
+            else -> questionText
+        }
+    }
+
+    // 统一的发送入口：取消旧请求 → 归档上一条 → 组装 system+user → 流式/非流式 → 回写 answerText。
+    // 「提问」「总结」「出题」三个按钮都走这里；imageBase64 仅「提问」在模型支持视觉时传入。
+    fun sendRequest(
+        userText: String,
+        systemPrompt: String,
+        displayQuestion: String,
+        imageBase64: String?,
+    ) {
+        val config = selectedConfigData
+        if (config == null) {
+            android.widget.Toast.makeText(context, noConfigTips, android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        // 取消上一次尚未结束的请求，避免串流/重复回答
+        HttpControl.cancel()
+        val t0 = System.currentTimeMillis()
+        loading = true
+        quizRevealed = false
+        showWebView.value = false
+        showResultVisible.value = true
+        // 归档上一条问答（含详细讲解与最终答案），保证原回答不被覆盖或丢失
+        if (lastQuestion.isNotBlank() && answerText.value.isNotBlank()) {
+            history.add(ChatItem(lastQuestion, answerText.value))
+        }
+        lastQuestion = displayQuestion
+        answerText.value = ""
+
+        val sendData = SendData(
+            stream = streamInfo.value,
+            config.modelName,
+            listOf(
+                SendMessage("system", systemPrompt),
+                SendMessage("user", userText),
+            ),
+        )
+        val jsonConfig = Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+            coerceInputValues = true
+        }
+        Log.d("ScanSearchTime", "[本地请求准备完成] ${System.currentTimeMillis() - t0}ms")
+        // 首个有效回答文字是否已到达（用于记录「首字耗时」）
+        var firstContent = true
+        // 统计解析失败的 SSE 块，用于排查乱码
+        var parseFailCount = 0
+
+        if (streamInfo.value) {
+            HttpControl.sendStream(
+                sendData,
+                config.api,
+                config.apiKey,
+                imageBase64,
+                onChunkReceived = { payload ->
+                    try {
+                        val str = jsonConfig.decodeFromString<ChatResponse>(payload)
+                        if (str.choices.isNotEmpty()) {
+                            val delta = str.choices[0].delta
+                            val content = delta?.content
+                            if (!content.isNullOrEmpty()) {
+                                if (firstContent) {
+                                    firstContent = false
+                                    loading = false
+                                    Log.d("ScanSearchTime", "[首个有效文字] ${System.currentTimeMillis() - t0}ms")
+                                }
+                                answerText.value += content
+                            }
+                        }
+                    } catch (e: Exception) {
+                        parseFailCount++
+                        Log.w(
+                            "ScanSearchParse",
+                            "[解析失败块#$parseFailCount] ${e.javaClass.simpleName}：${e.message} payload前120字=${payload.take(120)}"
+                        )
+                    }
+                },
+                onComplete = {
+                    loading = false
+                    Log.d("ScanSearchTime", "[完整回答结束] ${System.currentTimeMillis() - t0}ms")
+                    Log.d("ScanSearchParse", "[回答汇总] 累计长度=${answerText.value.length} 解析失败块数=$parseFailCount")
+                },
+                onError = { error ->
+                    loading = false
+                    answerText.value = "$requestFailedText$error"
+                },
+            )
+        } else {
+            HttpControl.send(
+                sendData,
+                config.api,
+                config.apiKey,
+                imageBase64,
+                onSuccess = { str ->
+                    loading = false
+                    Log.d("ScanSearchTime", "[完整回答结束] ${System.currentTimeMillis() - t0}ms")
+                    try {
+                        val jsstr = jsonConfig.decodeFromString<ChatResponse>(str)
+                        if (jsstr.choices.isNotEmpty()) {
+                            jsstr.choices[0].message?.content?.let {
+                                answerText.value = it
+                            }
+                        }
+                    } catch (e: Exception) {
+                        // 忽略解析异常
+                    }
+                },
+                onError = { str ->
+                    loading = false
+                    answerText.value = "$requestFailedText$str"
+                },
+            )
+        }
     }
 
     Card(
@@ -315,7 +445,15 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                 color = MaterialTheme.colorScheme.outlineVariant,
             )
 
-            // 内容区：回答结果 / 网页，占满剩余空间
+            // 内容区：回答结果 / 网页，占满剩余空间。
+            // 生成练习题时答案默认隐藏：只显示「【答案与解析】」之前的题目部分，点「查看答案」后展示全文。
+            val isQuizAnswerHidden = !quizRevealed && answerText.value.contains(QUIZ_ANSWER_MARKER)
+            val displayAnswer = if (isQuizAnswerHidden) {
+                answerText.value.substringBefore(QUIZ_ANSWER_MARKER).trim() +
+                    "\n\n> 答案与解析已隐藏，完成后点下方「查看答案」显示。"
+            } else {
+                answerText.value
+            }
             ContentArea(
                 modifier = Modifier
                     .weight(1f)
@@ -323,9 +461,51 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                 showResultVisible = showResultVisible.value,
                 showWebView = showWebView.value,
                 history = history,
-                currentAnswer = answerText.value,
+                currentAnswer = displayAnswer,
                 loading = loading,
             )
+
+            // 回答下方的操作行：总结 / 出题；有隐藏答案时出现「查看答案」
+            val canActOnAnswer = answerText.value.isNotBlank() && !loading
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = Dimens.SpaceSm),
+                horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceXs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ActionButton(
+                    text = summarizeText,
+                    enabled = canActOnAnswer,
+                    onClick = {
+                        sendRequest(
+                            "请基于以下「问题 + 回答」内容，为我生成一份适合学习和复习的总结：\n\n${buildContextText()}",
+                            CommonViewModel.PROMPT_SUMMARIZE,
+                            summarizeText,
+                            null,
+                        )
+                    },
+                )
+                ActionButton(
+                    text = generateQuizText,
+                    enabled = canActOnAnswer,
+                    onClick = {
+                        sendRequest(
+                            "请基于以下「问题 + 回答」内容，出 3 道由浅入深的练习题：\n\n${buildContextText()}",
+                            CommonViewModel.PROMPT_QUIZ,
+                            generateQuizText,
+                            null,
+                        )
+                    },
+                )
+                if (isQuizAnswerHidden && !loading) {
+                    ActionButton(
+                        text = revealAnswerText,
+                        onClick = { quizRevealed = true },
+                    )
+                }
+            }
 
             HorizontalDivider(
                 color = MaterialTheme.colorScheme.outlineVariant,
@@ -407,20 +587,6 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                             return@submit
                         }
 
-                        // 取消上一次尚未结束的请求，避免串流/重复回答
-                        HttpControl.cancel()
-                        val t0 = System.currentTimeMillis()
-                        loading = true
-
-                        showWebView.value = false
-                        showResultVisible.value = true
-                        // 归档上一条问答（含详细讲解与最终答案）
-                        if (lastQuestion.isNotBlank() && answerText.value.isNotBlank()) {
-                            history.add(ChatItem(lastQuestion, answerText.value))
-                        }
-                        lastQuestion = questionText
-                        answerText.value = ""
-
                         if (imageBase64 != null) {
                             Log.d("ScanSearchCapture", "视觉模型 ${config.modelName}，图片+文字一起发送 base64长度=${imageBase64.length}")
                             // 截图只用于本次提交，用完即清，避免把旧图附到后续无关问题上
@@ -438,95 +604,8 @@ fun FloatingWindowContent(commonViewModel: CommonViewModel) {
                         } else {
                             questionText
                         }
-                        val sendData = SendData(
-                            stream = streamInfo.value,
-                            config.modelName,
-                            listOf(
-                                SendMessage("system", prompt),
-                                SendMessage("user", userText),
-                            ),
-                        )
-                        val jsonConfig = Json {
-                            ignoreUnknownKeys = true
-                            isLenient = true
-                            coerceInputValues = true
-                        }
-                        Log.d("ScanSearchTime", "[本地请求准备完成] ${System.currentTimeMillis() - t0}ms")
-                        // 首个有效回答文字是否已到达（用于记录「首字耗时」）
-                        var firstContent = true
-                        // 统计解析失败的 SSE 块，用于排查乱码（判断是数据层还是展示层问题）
-                        var parseFailCount = 0
-
-                        if (streamInfo.value) {
-                            HttpControl.sendStream(
-                                sendData,
-                                config.api,
-                                config.apiKey,
-                                imageBase64,
-                                onChunkReceived = { payload ->
-                                    // payload 已是去掉 data: 前缀的 JSON，直接解析
-                                    try {
-                                        val str = jsonConfig.decodeFromString<ChatResponse>(payload)
-                                        if (str.choices.isNotEmpty()) {
-                                            val delta = str.choices[0].delta
-                                            // reasoning_content 为模型内部推理，不再展示
-                                            val content = delta?.content
-                                            if (!content.isNullOrEmpty()) {
-                                                if (firstContent) {
-                                                    firstContent = false
-                                                    loading = false
-                                                    Log.d("ScanSearchTime", "[首个有效文字] ${System.currentTimeMillis() - t0}ms")
-                                                }
-                                                answerText.value += content
-                                            }
-                                        }
-                                    } catch (e: Exception) {
-                                        // 诊断：解析失败的块往往就是乱码来源（如字段类型不匹配），
-                                        // 只记录失败块的载荷前缀与异常类型，不含 API Key。
-                                        parseFailCount++
-                                        Log.w(
-                                            "ScanSearchParse",
-                                            "[解析失败块#$parseFailCount] ${e.javaClass.simpleName}：${e.message} payload前120字=${payload.take(120)}"
-                                        )
-                                    }
-                                },
-                                onComplete = {
-                                    loading = false
-                                    Log.d("ScanSearchTime", "[完整回答结束] ${System.currentTimeMillis() - t0}ms")
-                                    Log.d("ScanSearchParse", "[回答汇总] 累计长度=${answerText.value.length} 解析失败块数=$parseFailCount")
-                                },
-                                onError = { error ->
-                                    loading = false
-                                    answerText.value = "$requestFailedText$error"
-                                },
-                            )
-                        } else {
-                            HttpControl.send(
-                                sendData,
-                                config.api,
-                                config.apiKey,
-                                imageBase64,
-                                onSuccess = { str ->
-                                    loading = false
-                                    Log.d("ScanSearchTime", "[完整回答结束] ${System.currentTimeMillis() - t0}ms")
-                                    try {
-                                        val jsstr = jsonConfig.decodeFromString<ChatResponse>(str)
-                                        if (jsstr.choices.isNotEmpty()) {
-                                            // reasoning_content 为模型内部推理，不再展示，仅取 content
-                                            jsstr.choices[0].message?.content?.let {
-                                                answerText.value = it
-                                            }
-                                        }
-                                    } catch (e: Exception) {
-                                        // 忽略解析异常
-                                    }
-                                },
-                                onError = { str ->
-                                    loading = false
-                                    answerText.value = "$requestFailedText$str"
-                                },
-                            )
-                        }
+                        // 复用统一发送入口：取消旧请求、归档上一条、流式/非流式、回写 answerText
+                        sendRequest(userText, prompt, questionText, imageBase64)
                     },
                     modifier = Modifier.weight(2f).height(Dimens.CompactControlHeight),
                     colors = ButtonDefaults.buttonColors(
@@ -734,10 +813,12 @@ private fun ActionButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     containerColor: Color = MaterialTheme.colorScheme.primaryContainer,
+    enabled: Boolean = true,
 ) {
     Button(
         onClick = onClick,
         modifier = modifier,
+        enabled = enabled,
         colors = ButtonDefaults.buttonColors(
             containerColor = containerColor,
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -779,3 +860,6 @@ private data class ChatItem(val question: String, val answer: String)
 
 // 最终答案标记：模型在回答末尾用它区分「详细讲解」与「最终答案」
 private const val FINAL_ANSWER_MARKER = "【最终答案】"
+
+// 「生成练习题」答案标记：题目在前，「【答案与解析】」之后的答案与解析默认隐藏，点「查看答案」后展示
+private const val QUIZ_ANSWER_MARKER = "【答案与解析】"

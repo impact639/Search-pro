@@ -1,8 +1,6 @@
 package com.buguagaoshu.scan.search.ui
 
 import android.content.ComponentName
-import android.content.Context
-import android.content.ContextWrapper
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -38,7 +36,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,9 +49,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.LifecycleOwner
 import com.buguagaoshu.scan.search.control.HttpControl
 import com.buguagaoshu.scan.search.data.ConfigData
 import com.buguagaoshu.scan.search.data.SendData
@@ -70,20 +64,6 @@ import com.buguagaoshu.scan.search.R.string as TextValue
 fun HomePage(commonViewModel: CommonViewModel, openFloatingWindow: () -> Unit) {
     val configMap = commonViewModel.apiMap
     val context = LocalContext.current
-
-    // 无障碍服务（划词）当前是否已开启。每次回到首页（onResume）都重新检测，
-    // 避免用户去无障碍设置页开完服务、返回后这里状态还停留在旧的「未开启」。
-    val lifecycleOwner = remember(context) { context.findLifecycleOwner() }
-    val screenReaderEnabled = remember { mutableStateOf(isScreenReaderEnabled(context)) }
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                screenReaderEnabled.value = isScreenReaderEnabled(context)
-            }
-        }
-        lifecycleOwner?.lifecycle?.addObserver(observer)
-        onDispose { lifecycleOwner?.lifecycle?.removeObserver(observer) }
-    }
 
     // 当前选中（高亮）的配置 id；与 map 中的 cheek 标志保持同步
     var selectedConfigId by remember { mutableStateOf<String?>(null) }
@@ -163,21 +143,6 @@ fun HomePage(commonViewModel: CommonViewModel, openFloatingWindow: () -> Unit) {
                 text = stringResource(TextValue.enable_selection_tips),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            // 划词服务状态提示：绿=已开启可用，红=未开启（重装后会被系统关闭，需点上面按钮重新开启）
-            Text(
-                text = if (screenReaderEnabled.value) {
-                    context.getString(TextValue.accessibility_enabled)
-                } else {
-                    context.getString(TextValue.accessibility_disabled)
-                },
-                style = MaterialTheme.typography.labelMedium,
-                color = if (screenReaderEnabled.value) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.error
-                },
             )
 
             // 配置列表
@@ -371,36 +336,6 @@ fun HomePage(commonViewModel: CommonViewModel, openFloatingWindow: () -> Unit) {
                 }
             },
         )
-    }
-}
-
-// 从 Context 向上解包找到 LifecycleOwner（通常是宿主 Activity），用于监听 onResume 刷新划词状态
-private fun Context.findLifecycleOwner(): LifecycleOwner? {
-    var c: Context = this
-    while (c is ContextWrapper) {
-        if (c is LifecycleOwner) return c
-        c = c.baseContext
-    }
-    return c as? LifecycleOwner
-}
-
-// 判断无障碍服务（划词）是否已开启：读取系统已启用服务列表并匹配组件名
-private fun isScreenReaderEnabled(context: Context): Boolean {
-    return try {
-        val enabled = Settings.Secure.getString(
-            context.contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
-        ) ?: return false
-        val component = ComponentName(context, ScreenReaderService::class.java)
-        enabled
-            .split(':')
-            .map { it.trim() }
-            .any {
-                it.equals(component.flattenToString(), ignoreCase = true) ||
-                    it.equals(component.flattenToShortString(), ignoreCase = true)
-            }
-    } catch (e: Exception) {
-        false
     }
 }
 
